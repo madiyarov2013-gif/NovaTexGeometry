@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>3D Matematik Modellar | O'zbekcha</title>
+    <meta name="description" content="Matematikada fazoviy shakllarni 3D da vizualizatsiya qilish va o'rganish platformasi. Prizma, piramida, silindr, konus, shar formulalari va interaktiv modellar." />
+    
+    <!-- Polyfills for older browsers / electronic whiteboards -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6,Array.prototype.includes,Object.assign,Promise,Symbol,requestAnimationFrame"></script>
+    <script>
+      // Canvas polyfill check
+      if (!window.CanvasRenderingContext2D) {
+        document.body.innerHTML = '<div style="padding:20px;font-size:24px;text-align:center;">Bu brauzer qo\'llab-quvvatlanmaydi. Iltimos, Chrome yoki Edge brauzerini ishlating.</div>';
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
