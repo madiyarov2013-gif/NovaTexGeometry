@@ -24,11 +24,11 @@ export function Dashboard() {
                             text="3D Matematik"
                             fontSize="52px"
                             fontWeight="800"
-                            strokeWidth={0.4}
+                            strokeWidth={0.5}
                             duration={0.15}
                             animationDuration={4}
                             gradientColors={['#6366f1', '#8b5cf6', '#06b6d4', '#ec4899', '#6366f1']}
-                            strokeColor="#3a3a5a"
+                            strokeColor="rgba(255, 255, 255, 0.3)"
                             viewBoxWidth={600}
                             viewBoxHeight={90}
                         />
@@ -36,11 +36,11 @@ export function Dashboard() {
                             text="Modellashtirish Platformasi"
                             fontSize="42px"
                             fontWeight="800"
-                            strokeWidth={0.35}
+                            strokeWidth={0.5}
                             duration={0.15}
                             animationDuration={5}
                             gradientColors={['#ffffff', '#a78bfa', '#60a5fa', '#34d399', '#ffffff']}
-                            strokeColor="#2a2a3a"
+                            strokeColor="rgba(255, 255, 255, 0.2)"
                             viewBoxWidth={800}
                             viewBoxHeight={80}
                         />

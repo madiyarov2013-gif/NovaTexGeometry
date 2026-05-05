@@ -78,20 +78,18 @@ export function HoverText({
                     </mask>
                 </defs>
 
-                {/* Base text - stroke only (dark outline) */}
+                {/* Base text - clean, solid fill, no stroke to prevent jaggedness */}
                 <text
                     x="50%"
                     y="50%"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    strokeWidth={strokeWidth}
-                    fill="transparent"
-                    stroke={strokeColor}
+                    fill="#ffffff"
                     style={{
                         fontSize,
                         fontWeight,
                         fontFamily: 'Inter, sans-serif',
-                        opacity: hovered ? 0.7 : 1,
+                        opacity: hovered ? 1 : 0.6,
                         transition: 'opacity 0.3s ease',
                     }}
                 >
