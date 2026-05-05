@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { UserMenu } from '../components/UserMenu';
+import { HoverText } from '../components/HoverText';
 
 export function Dashboard() {
     return (
@@ -18,11 +19,32 @@ export function Dashboard() {
             {/* Hero Section */}
             <section className="hero">
                 <div className="hero-content">
-                    <h1>
-                        <span className="gradient-text">3D Matematik</span>
-                        <br />
-                        Modellashtirish Platformasi
-                    </h1>
+                    <div className="hero-hovertext-wrapper">
+                        <HoverText
+                            text="3D Matematik"
+                            fontSize="52px"
+                            fontWeight="800"
+                            strokeWidth={0.4}
+                            duration={0.15}
+                            animationDuration={4}
+                            gradientColors={['#6366f1', '#8b5cf6', '#06b6d4', '#ec4899', '#6366f1']}
+                            strokeColor="#3a3a5a"
+                            viewBoxWidth={600}
+                            viewBoxHeight={90}
+                        />
+                        <HoverText
+                            text="Modellashtirish Platformasi"
+                            fontSize="42px"
+                            fontWeight="800"
+                            strokeWidth={0.35}
+                            duration={0.15}
+                            animationDuration={5}
+                            gradientColors={['#ffffff', '#a78bfa', '#60a5fa', '#34d399', '#ffffff']}
+                            strokeColor="#2a2a3a"
+                            viewBoxWidth={800}
+                            viewBoxHeight={80}
+                        />
+                    </div>
                     <p className="hero-subtitle">
                         Fazoviy shakllarni interaktiv o'rganish uchun professional vosita
                     </p>

@@ -206,6 +206,28 @@ a {
   background-clip: text;
 }
 
+.hero-hovertext-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  margin-bottom: var(--spacing-lg);
+  width: 100%;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-hovertext-wrapper svg {
+  overflow: visible;
+  filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.15));
+  transition: filter 0.3s ease;
+}
+
+.hero-hovertext-wrapper svg:hover {
+  filter: drop-shadow(0 0 30px rgba(99, 102, 241, 0.4));
+}
+
 .hero-subtitle {
   font-size: 1.25rem;
   color: var(--text-secondary);
