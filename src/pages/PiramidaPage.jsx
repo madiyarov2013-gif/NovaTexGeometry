@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { UserMenu } from '../components/UserMenu';
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls, Grid, Environment, PerspectiveCamera, Text, Line, Html } from '@react-three/drei';
+import { OrbitControls, Grid, Environment, PerspectiveCamera, Text, Line, Html, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 
 // O'lchov birliklari
@@ -17,23 +17,43 @@ const COLOR_PALETTE = [
 ];
 
 // 3D Piramida komponenti
-function Piramida3D({ sides, sideLength, height, tiltAngle, showWireframe, showDimensions, fillColor }) {
+function Piramida3D({
+    sides,
+    sideLength,
+    height,
+    tiltAngle,
+    showWireframe,
+    showDimensions,
+    fillColor,
+    showAngles,
+    showHeight,
+    showApothem,
+    showBaseDiagonals,
+    showMedians,
+    unitSymbol
+}) {
+    const radius = sideLength / (2 * Math.sin(Math.PI / sides));
+    const apothem = radius * Math.cos(Math.PI / sides);
+
+    const baseVertices = useMemo(() => {
+        const verts = [];
+        for (let i = 0; i < sides; i++) {
+            const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            verts.push({ x, y: z });
+        }
+        return verts;
+    }, [sides, radius]);
+
     const geometry = useMemo(() => {
         const geometry = new THREE.BufferGeometry();
         const vertices = [];
         const indices = [];
 
-        // Asos radiusi
-        const radius = sideLength / (2 * Math.sin(Math.PI / sides));
-
         // Asos cho'qqilari
-        const baseVertices = [];
         for (let i = 0; i < sides; i++) {
-            const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
-            const x = Math.cos(angle) * radius;
-            const z = Math.sin(angle) * radius;
-            baseVertices.push([x, 0, z]);
-            vertices.push(x, 0, z);
+            vertices.push(baseVertices[i].x, 0, baseVertices[i].y);
         }
 
         // Cho'qqi (apex)
@@ -56,7 +76,7 @@ function Piramida3D({ sides, sideLength, height, tiltAngle, showWireframe, showD
         geometry.computeVertexNormals();
 
         return geometry;
-    }, [sides, sideLength, height]);
+    }, [sides, height, baseVertices]);
 
     // Og'ish burchagi (radianlar)
     const tiltRad = (tiltAngle * Math.PI) / 180;
@@ -78,6 +98,7 @@ function Piramida3D({ sides, sideLength, height, tiltAngle, showWireframe, showD
                     side={THREE.DoubleSide}
                 />
             </mesh>
+
             {/* Wireframe overlay */}
             <mesh
                 geometry={geometry}
@@ -85,6 +106,138 @@ function Piramida3D({ sides, sideLength, height, tiltAngle, showWireframe, showD
             >
                 <meshBasicMaterial color="#34d399" wireframe />
             </mesh>
+
+            {/* Height Line */}
+            {showHeight && (
+                <group>
+                    <Line
+                        points={[[0, -height/2, 0], [0, height/2, 0]]}
+                        color="#f59e0b"
+                        lineWidth={2}
+                        transparent
+                        opacity={0.8}
+                        dashScale={2}
+                    />
+                    <Billboard position={[0, 0, 0]}>
+                        <Text
+                            fontSize={0.4}
+                            color="#f59e0b"
+                            anchorX="center"
+                            anchorY="middle"
+                        >
+                            h = {height} {unitSymbol}
+                        </Text>
+                    </Billboard>
+                </group>
+            )}
+
+            {/* Base Diagonals */}
+            {showBaseDiagonals && (
+                <group>
+                    {baseVertices.map((vertex, i) => {
+                        const diagonals = [];
+                        for (let j = i + 2; j < sides; j++) {
+                            if (i === 0 && j === sides - 1) continue;
+                            const target = baseVertices[j];
+                            diagonals.push(
+                                <Line
+                                    key={`diag-base-${i}-${j}`}
+                                    points={[
+                                        [vertex.x, -height/2, vertex.y],
+                                        [target.x, -height/2, target.y]
+                                    ]}
+                                    color="#ec4899"
+                                    lineWidth={2}
+                                    transparent
+                                    opacity={0.6}
+                                    dashScale={3}
+                                />
+                            );
+                        }
+                        return <group key={`base-diagonals-${i}`}>{diagonals}</group>;
+                    })}
+                </group>
+            )}
+
+            {/* Apothem */}
+            {showApothem && (
+                <group>
+                    {baseVertices.map((vertex, i) => {
+                        const nextVertex = baseVertices[(i + 1) % sides];
+                        const midX = (vertex.x + nextVertex.x) / 2;
+                        const midY = (vertex.y + nextVertex.y) / 2;
+
+                        return (
+                            <group key={`apothem-${i}`}>
+                                <Line
+                                    points={[[0, -height/2, 0], [midX, -height/2, midY]]}
+                                    color="#06b6d4"
+                                    lineWidth={2}
+                                    transparent
+                                    opacity={0.8}
+                                    dashScale={2}
+                                />
+                                {/* Slant height (Apotema piramida) */}
+                                <Line
+                                    points={[[0, height/2, 0], [midX, -height/2, midY]]}
+                                    color="#3b82f6"
+                                    lineWidth={2}
+                                    transparent
+                                    opacity={0.8}
+                                    dashScale={2}
+                                />
+                            </group>
+                        );
+                    })}
+                </group>
+            )}
+
+            {/* Medians */}
+            {showMedians && (
+                <group>
+                    {baseVertices.map((vertex, i) => (
+                        <group key={`median-${i}`}>
+                            <Line
+                                points={[
+                                    [vertex.x, -height/2, vertex.y],
+                                    [0, -height/2, 0]
+                                ]}
+                                color="#22c55e"
+                                lineWidth={2}
+                                transparent
+                                opacity={0.7}
+                                dashScale={2}
+                            />
+                        </group>
+                    ))}
+                </group>
+            )}
+
+            {/* Angles */}
+            {showAngles && (
+                <group>
+                    {baseVertices.map((vertex, i) => {
+                        const nextVertex = baseVertices[(i + 1) % sides];
+                        const anglePos = [
+                            (vertex.x + nextVertex.x) * 0.4,
+                            -height/2,
+                            (vertex.y + nextVertex.y) * 0.4
+                        ];
+                        return (
+                            <Billboard key={`angle-${i}`} position={anglePos}>
+                                <Text
+                                    fontSize={0.25}
+                                    color="#8b5cf6"
+                                    anchorX="center"
+                                    anchorY="middle"
+                                >
+                                    {(180 * (sides - 2) / sides).toFixed(0)}°
+                                </Text>
+                            </Billboard>
+                        );
+                    })}
+                </group>
+            )}
         </group>
     );
 }
@@ -110,6 +263,11 @@ export function PiramidaPage() {
     const [showWireframe, setShowWireframe] = useState(false);
     const [showGrid, setShowGrid] = useState(true);
     const [showAxes, setShowAxes] = useState(true);
+    const [showAngles, setShowAngles] = useState(false);
+    const [showHeight, setShowHeight] = useState(false);
+    const [showApothem, setShowApothem] = useState(false);
+    const [showBaseDiagonals, setShowBaseDiagonals] = useState(false);
+    const [showMedians, setShowMedians] = useState(false);
 
     // Hisob-kitoblar modali
     const [showCalcModal, setShowCalcModal] = useState(false);
@@ -425,7 +583,7 @@ export function PiramidaPage() {
                                     onChange={(e) => setSides(Math.max(3, Math.min(12, parseInt(e.target.value) || 3)))}
                                 />
                                 <span className="shape-preview">
-                                    {sides === 3 ? '△' : sides === 4 ? '□' : sides === 5 ? '⬠' : sides === 6 ? '⬡' : `${sides}-burchak`}
+                                    {sides === 3 ? '△' : sides === 4 ? '□' : sides === 5 ? '⬠' : sides === 6 ? '⬡' : null}
                                 </span>
                             </div>
                         </div>
@@ -503,36 +661,70 @@ export function PiramidaPage() {
                         />
                     </div>
 
-                    {/* Vizualizatsiya */}
-                    <div className="param-group viz-options">
-                        <label>Vizualizatsiya</label>
-                        <div className="toggle-group">
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showWireframe}
-                                    onChange={(e) => setShowWireframe(e.target.checked)}
-                                />
-                                <span>Wireframe</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showGrid}
-                                    onChange={(e) => setShowGrid(e.target.checked)}
-                                />
-                                <span>Grid</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showAxes}
-                                    onChange={(e) => setShowAxes(e.target.checked)}
-                                />
-                                <span>O'qlar</span>
-                            </label>
+                    {/* Ko'rinish - Professional UI */}
+                    <details className="pro-section settings-view-section" open>
+                        <summary className="pro-section-header">
+                            <div className="pro-section-icon">👁️</div>
+                            <span className="pro-section-title">Ko'rinish</span>
+                            <span className="pro-section-badge">{[showWireframe, showGrid, showAxes, showAngles, showHeight, showApothem, showBaseDiagonals, showMedians].filter(Boolean).length}/8</span>
+                            <svg className="pro-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </summary>
+                        <div className="pro-section-content">
+                            <div className="pro-subsection">
+                                <h4 className="pro-subsection-title">📐 Asosiy</h4>
+                                <div className="pro-toggle-grid-settings">
+                                    <button className={`pro-toggle-item ${showGrid ? 'active' : ''}`} onClick={() => setShowGrid(!showGrid)}>
+                                        <span className="toggle-icon">⊞</span>
+                                        <span className="toggle-label">Grid</span>
+                                        <span className={`toggle-status ${showGrid ? 'on' : 'off'}`}>{showGrid ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showWireframe ? 'active' : ''}`} onClick={() => setShowWireframe(!showWireframe)}>
+                                        <span className="toggle-icon">🧊</span>
+                                        <span className="toggle-label">Wireframe</span>
+                                        <span className={`toggle-status ${showWireframe ? 'on' : 'off'}`}>{showWireframe ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showAxes ? 'active' : ''}`} onClick={() => setShowAxes(!showAxes)}>
+                                        <span className="toggle-icon">➕</span>
+                                        <span className="toggle-label">O'qlar</span>
+                                        <span className={`toggle-status ${showAxes ? 'on' : 'off'}`}>{showAxes ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showAngles ? 'active' : ''}`} onClick={() => setShowAngles(!showAngles)}>
+                                        <span className="toggle-icon">∠</span>
+                                        <span className="toggle-label">Burchaklar</span>
+                                        <span className={`toggle-status ${showAngles ? 'on' : 'off'}`}>{showAngles ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showHeight ? 'active' : ''}`} onClick={() => setShowHeight(!showHeight)}>
+                                        <span className="toggle-icon">↕️</span>
+                                        <span className="toggle-label">Balandlik</span>
+                                        <span className={`toggle-status ${showHeight ? 'on' : 'off'}`}>{showHeight ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="pro-subsection" style={{ marginTop: '16px' }}>
+                                <h4 className="pro-subsection-title">✨ Qo'shimcha</h4>
+                                <div className="pro-toggle-grid-settings">
+                                    <button className={`pro-toggle-item ${showApothem ? 'active' : ''}`} onClick={() => setShowApothem(!showApothem)}>
+                                        <span className="toggle-icon">📏</span>
+                                        <span className="toggle-label">Apotema</span>
+                                        <span className={`toggle-status ${showApothem ? 'on' : 'off'}`}>{showApothem ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showBaseDiagonals ? 'active' : ''}`} onClick={() => setShowBaseDiagonals(!showBaseDiagonals)}>
+                                        <span className="toggle-icon">⤡</span>
+                                        <span className="toggle-label">Asos diagonali</span>
+                                        <span className={`toggle-status ${showBaseDiagonals ? 'on' : 'off'}`}>{showBaseDiagonals ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showMedians ? 'active' : ''}`} onClick={() => setShowMedians(!showMedians)}>
+                                        <span className="toggle-icon">◺</span>
+                                        <span className="toggle-label">Medianlar</span>
+                                        <span className={`toggle-status ${showMedians ? 'on' : 'off'}`}>{showMedians ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    </details>
                 </aside>
 
                 {/* Markaz - 3D Sahna */}
@@ -555,6 +747,12 @@ export function PiramidaPage() {
                                 showWireframe={showWireframe}
                                 showDimensions={true}
                                 fillColor={piramidaFillColor}
+                                showAngles={showAngles}
+                                showHeight={showHeight}
+                                showApothem={showApothem}
+                                showBaseDiagonals={showBaseDiagonals}
+                                showMedians={showMedians}
+                                unitSymbol={unitSymbol}
                             />
                         </group>
 
@@ -607,6 +805,12 @@ export function PiramidaPage() {
                                         showWireframe={showWireframe}
                                         showDimensions={true}
                                         fillColor={piramidaFillColor}
+                                        showAngles={showAngles}
+                                        showHeight={showHeight}
+                                        showApothem={showApothem}
+                                        showBaseDiagonals={showBaseDiagonals}
+                                        showMedians={showMedians}
+                                        unitSymbol={unitSymbol}
                                     />
                                 </group>
                                 {showGrid && (
