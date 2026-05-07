@@ -711,7 +711,7 @@ export function PrizmaPage() {
                                     onChange={(e) => setSides(Math.max(3, Math.min(12, parseInt(e.target.value) || 3)))}
                                 />
                                 <span className="shape-preview">
-                                    {sides === 3 ? '\u25B3' : sides === 4 ? '\u25A1' : sides === 5 ? '\u2B20' : sides === 6 ? '\u2B21' : `${sides}-burchak`}
+                                    {sides === 3 ? '\u25B3' : sides === 4 ? '\u25A1' : sides === 5 ? '\u2B20' : sides === 6 ? '\u2B21' : null}
                                 </span>
                             </div>
                         </div>
