@@ -25,6 +25,7 @@ const COLOR_PALETTE = [
 // Professional Fullscreen Rectangle Whiteboard
 function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onSizeChange }) {
     const canvasRef = useRef(null);
+    const drawingCanvasRef = useRef(null);
     const containerRef = useRef(null);
 
     const [scale, setScale] = useState(1);
@@ -204,6 +205,17 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             });
         }
         ctx.restore();
+    }, [scale, offset, width, height, canvasSize, rectangleData, unitSymbol, rectangleFillColor]);
+
+    // Drawing canvas
+    useEffect(() => {
+        const canvas = drawingCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const cWidth = canvas.width;
+        const cHeight = canvas.height;
+
+        ctx.clearRect(0, 0, cWidth, cHeight);
 
         // Draw paths
         drawings.forEach(d => {
@@ -212,7 +224,9 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             ctx.translate(cWidth / 2, cHeight / 2);
             ctx.scale(scale, scale);
             ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
-            ctx.strokeStyle = d.color;
+            
+            ctx.globalCompositeOperation = d.isEraser ? 'destination-out' : 'source-over';
+            ctx.strokeStyle = d.isEraser ? 'rgba(0,0,0,1)' : d.color;
             ctx.lineWidth = d.size / scale;
             ctx.lineCap = 'round';
             ctx.beginPath();
@@ -227,8 +241,10 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             ctx.translate(cWidth / 2, cHeight / 2);
             ctx.scale(scale, scale);
             ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
-            ctx.strokeStyle = penColor;
-            ctx.lineWidth = penSize / scale;
+            
+            ctx.globalCompositeOperation = activeTool === 'eraser' ? 'destination-out' : 'source-over';
+            ctx.strokeStyle = activeTool === 'eraser' ? 'rgba(0,0,0,1)' : penColor;
+            ctx.lineWidth = (activeTool === 'eraser' ? eraserSize : penSize) / scale;
             ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(currentPath[0].x, currentPath[0].y);
@@ -236,7 +252,7 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             ctx.stroke();
             ctx.restore();
         }
-    }, [scale, offset, width, height, canvasSize, rectangleData, drawings, currentPath, penColor, penSize, unitSymbol, rectangleFillColor]);
+    }, [drawings, currentPath, scale, offset, penColor, penSize, eraserSize, activeTool, canvasSize]);
 
     const getCanvasCoords = (e) => {
         const canvas = canvasRef.current;
@@ -324,7 +340,12 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
 
     const handleMouseUp = () => {
         if (isDrawing && currentPath.length > 1) {
-            setDrawings(prev => [...prev, { points: currentPath, color: penColor, size: penSize }]);
+            setDrawings(prev => [...prev, { 
+                points: currentPath, 
+                color: penColor, 
+                size: activeTool === 'eraser' ? eraserSize : penSize,
+                isEraser: activeTool === 'eraser'
+            }]);
         }
         setIsDrawing(false);
         setDraggingVertex(null);
@@ -376,7 +397,27 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleMouseUp}
                 onWheel={handleWheel}
-                style={{ cursor: activeTool === 'pen' ? 'crosshair' : (isDragging ? 'grabbing' : 'grab'), touchAction: 'none' }}
+                style={{ cursor: activeTool === 'pen' || activeTool === 'eraser' ? (activeTool === 'eraser' ? 'cell' : 'crosshair') : (isDragging ? 'grabbing' : 'grab'), touchAction: 'none' }}
+            />
+            <canvas
+                ref={drawingCanvasRef}
+                width={canvasSize.width}
+                height={canvasSize.height}
+                className="whiteboard-drawing-canvas"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleMouseUp}
+                onWheel={handleWheel}
+                style={{ 
+                    position: 'absolute', top: 0, left: 0, zIndex: 10,
+                    pointerEvents: (activeTool === 'pen' || activeTool === 'eraser') ? 'auto' : 'none',
+                    cursor: activeTool === 'eraser' ? 'cell' : 'crosshair',
+                    touchAction: 'none'
+                }}
             />
 
             <button className={`toolbar-toggle-btn ${isToolbarOpen ? 'open' : ''}`} onClick={() => setIsToolbarOpen(!isToolbarOpen)}>
@@ -465,13 +506,6 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             )}
 
             {/* Save Button */}
-            <button className="whiteboard-save-btn" title="Saqlash">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                    <polyline points="17 21 17 13 7 13 7 21" />
-                    <polyline points="7 3 7 8 15 8" />
-                </svg>
-            </button>
 
             <button className="whiteboard-close-btn" onClick={onClose} title="Yopish">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 14h6v6" /><path d="M20 10h-6V4" /><path d="M14 10l7-7" /><path d="M3 21l7-7" /></svg>
@@ -519,9 +553,29 @@ function RectangleCanvas({
         const cWidth = canvas.width;
         const cHeight = canvas.height;
 
-        // Clear
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, cWidth, cHeight);
+
+        // Grid
+        if (showGrid) {
+            const gridSize = 25;
+            const offsetX = (cWidth / 2) % gridSize;
+            const offsetY = (cHeight / 2) % gridSize;
+            ctx.strokeStyle = '#1a1a24';
+            ctx.lineWidth = 1;
+            for (let x = offsetX; x < cWidth; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
+            }
+            for (let x = offsetX - gridSize; x >= 0; x -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
+            }
+            for (let y = offsetY; y < cHeight; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cWidth, y); ctx.stroke();
+            }
+            for (let y = offsetY - gridSize; y >= 0; y -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cWidth, y); ctx.stroke();
+            }
+        }
 
         ctx.save();
 
@@ -529,38 +583,6 @@ function RectangleCanvas({
         ctx.translate(cWidth / 2, cHeight / 2);
         ctx.scale(scale, scale);
         ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
-
-        // Grid
-        if (showGrid) {
-            const gridSize = 40;
-            const visibleLeft = -offset.x - cWidth / 2 / scale;
-            const visibleTop = -offset.y - cHeight / 2 / scale;
-            const visibleRight = -offset.x + cWidth / 2 / scale + cWidth;
-            const visibleBottom = -offset.y + cHeight / 2 / scale + cHeight;
-
-            const startX = Math.floor(visibleLeft / gridSize) * gridSize;
-            const startY = Math.floor(visibleTop / gridSize) * gridSize;
-
-            // Minor
-            ctx.strokeStyle = '#1a1a24';
-            ctx.lineWidth = 0.5 / scale;
-            for (let x = startX; x < visibleRight; x += gridSize) {
-                ctx.beginPath(); ctx.moveTo(x, visibleTop); ctx.lineTo(x, visibleBottom); ctx.stroke();
-            }
-            for (let y = startY; y < visibleBottom; y += gridSize) {
-                ctx.beginPath(); ctx.moveTo(visibleLeft, y); ctx.lineTo(visibleRight, y); ctx.stroke();
-            }
-
-            // Major
-            ctx.strokeStyle = '#2a2a38';
-            ctx.lineWidth = 1 / scale;
-            for (let x = startX; x < visibleRight; x += gridSize * 4) {
-                ctx.beginPath(); ctx.moveTo(x, visibleTop); ctx.lineTo(x, visibleBottom); ctx.stroke();
-            }
-            for (let y = startY; y < visibleBottom; y += gridSize * 4) {
-                ctx.beginPath(); ctx.moveTo(visibleLeft, y); ctx.lineTo(visibleRight, y); ctx.stroke();
-            }
-        }
 
         // Calculate Rect geometry
         const maxDim = Math.max(width, height);
@@ -1615,3 +1637,4 @@ export function TortburchakPage() {
         </div>
     );
 }
+

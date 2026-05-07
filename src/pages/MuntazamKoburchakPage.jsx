@@ -272,7 +272,7 @@ function FullscreenPolygonWhiteboard({
         drawings.forEach(drawing => {
             if (drawing.points.length < 2) return;
             ctx.globalCompositeOperation = drawing.isEraser ? 'destination-out' : 'source-over';
-            ctx.strokeStyle = drawing.color;
+            ctx.strokeStyle = drawing.isEraser ? 'rgba(0,0,0,1)' : drawing.color;
             ctx.lineWidth = (drawing.isEraser ? drawing.size : drawing.size) / scale;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -286,7 +286,7 @@ function FullscreenPolygonWhiteboard({
 
         if (currentPath.length > 1) {
             ctx.globalCompositeOperation = activeTool === 'eraser' ? 'destination-out' : 'source-over';
-            ctx.strokeStyle = penColor;
+            ctx.strokeStyle = activeTool === 'eraser' ? 'rgba(0,0,0,1)' : penColor;
             ctx.lineWidth = (activeTool === 'eraser' ? eraserSize : penSize) / scale;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -590,32 +590,48 @@ function FullscreenPolygonWhiteboard({
 // Polygon Canvas komponenti
 function PolygonCanvas({ sides, sideLength, showGrid, showApotema, showSides, showAngles, showIncircle, showCircumcircle, calculations }) {
     const canvasRef = useRef(null);
+    const [canvasSize, setCanvasSize] = useState({ width: 700, height: 550 });
+
+    useEffect(() => {
+        const updateSize = () => {
+            if (canvasRef.current && canvasRef.current.parentElement) {
+                const parent = canvasRef.current.parentElement;
+                setCanvasSize({ width: parent.clientWidth, height: parent.clientHeight });
+            }
+        };
+        updateSize();
+        window.addEventListener('resize', updateSize);
+        return () => window.removeEventListener('resize', updateSize);
+    }, []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
+        const width = canvasSize.width;
+        const height = canvasSize.height;
 
-        ctx.fillStyle = '#0d0d14';
+        ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, width, height);
 
         // Grid
         if (showGrid) {
+            const gridSize = 30;
+            const offsetX = (width / 2) % gridSize;
+            const offsetY = (height / 2) % gridSize;
             ctx.strokeStyle = '#1a1a28';
             ctx.lineWidth = 1;
-            for (let x = 0; x < width; x += 30) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, height);
-                ctx.stroke();
+            for (let x = offsetX; x < width; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
             }
-            for (let y = 0; y < height; y += 30) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
+            for (let x = offsetX - gridSize; x >= 0; x -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+            }
+            for (let y = offsetY; y < height; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+            }
+            for (let y = offsetY - gridSize; y >= 0; y -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
             }
         }
 
@@ -796,9 +812,9 @@ function PolygonCanvas({ sides, sideLength, showGrid, showApotema, showSides, sh
             ctx.fillText(`a = ${sideLength}`, midX + nx, midY + ny);
         }
 
-    }, [sides, sideLength, showGrid, showApotema, showSides, showAngles, showIncircle, showCircumcircle, calculations]);
+    }, [sides, sideLength, showGrid, showApotema, showSides, showAngles, showIncircle, showCircumcircle, calculations, canvasSize]);
 
-    return <canvas ref={canvasRef} width={700} height={550} className="triangle-canvas" />;
+    return <canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} className="triangle-canvas" style={{ display: 'block', width: '100%', height: '100%' }} />;
 }
 
 // Asosiy sahifa komponenti

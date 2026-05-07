@@ -24,6 +24,7 @@ const COLOR_PALETTE = [
 // Fullscreen Parallelogram komponenti
 function FullscreenParallelogram({ sideA, sideB, height, angle, unitSymbol, isValid, onClose, onSizeChange }) {
     const canvasRef = useRef(null);
+    const drawingCanvasRef = useRef(null);
     const containerRef = useRef(null);
 
     const [scale, setScale] = useState(1);
@@ -215,14 +216,29 @@ function FullscreenParallelogram({ sideA, sideB, height, angle, unitSymbol, isVa
         }
         ctx.restore();
 
+
+    }, [scale, offset, sideA, sideB, height, angle, isValid, canvasSize, parallelogramData, unitSymbol, parallelogramFillColor]);
+
+    // Drawing canvas
+    useEffect(() => {
+        const canvas = drawingCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const cWidth = canvas.width;
+        const cHeight = canvas.height;
+
+        ctx.clearRect(0, 0, cWidth, cHeight);
+
         // Draw paths
         drawings.forEach(d => {
             if (d.points.length < 2) return;
             ctx.save();
-            ctx.translate(width / 2, cHeight / 2);
+            ctx.translate(cWidth / 2, cHeight / 2);
             ctx.scale(scale, scale);
-            ctx.translate(-width / 2 + offset.x, -cHeight / 2 + offset.y);
-            ctx.strokeStyle = d.color;
+            ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
+            
+            ctx.globalCompositeOperation = d.isEraser ? 'destination-out' : 'source-over';
+            ctx.strokeStyle = d.isEraser ? 'rgba(0,0,0,1)' : d.color;
             ctx.lineWidth = d.size / scale;
             ctx.lineCap = 'round';
             ctx.beginPath();
@@ -234,11 +250,13 @@ function FullscreenParallelogram({ sideA, sideB, height, angle, unitSymbol, isVa
 
         if (currentPath.length > 1) {
             ctx.save();
-            ctx.translate(width / 2, cHeight / 2);
+            ctx.translate(cWidth / 2, cHeight / 2);
             ctx.scale(scale, scale);
-            ctx.translate(-width / 2 + offset.x, -cHeight / 2 + offset.y);
-            ctx.strokeStyle = penColor;
-            ctx.lineWidth = penSize / scale;
+            ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
+            
+            ctx.globalCompositeOperation = activeTool === 'eraser' ? 'destination-out' : 'source-over';
+            ctx.strokeStyle = activeTool === 'eraser' ? 'rgba(0,0,0,1)' : penColor;
+            ctx.lineWidth = (activeTool === 'eraser' ? eraserSize : penSize) / scale;
             ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(currentPath[0].x, currentPath[0].y);
@@ -246,7 +264,7 @@ function FullscreenParallelogram({ sideA, sideB, height, angle, unitSymbol, isVa
             ctx.stroke();
             ctx.restore();
         }
-    }, [scale, offset, sideA, sideB, height, angle, isValid, canvasSize, parallelogramData, drawings, currentPath, penColor, penSize, unitSymbol, parallelogramFillColor]);
+    }, [drawings, currentPath, scale, offset, penColor, penSize, eraserSize, activeTool, canvasSize]);
 
     const getCanvasCoords = (e) => {
         const canvas = canvasRef.current;
@@ -344,7 +362,12 @@ function FullscreenParallelogram({ sideA, sideB, height, angle, unitSymbol, isVa
 
     const handleMouseUp = () => {
         if (isDrawing && currentPath.length > 1) {
-            setDrawings(prev => [...prev, { points: currentPath, color: penColor, size: penSize }]);
+            setDrawings(prev => [...prev, { 
+                points: currentPath, 
+                color: penColor, 
+                size: activeTool === 'eraser' ? eraserSize : penSize,
+                isEraser: activeTool === 'eraser'
+            }]);
         }
         setIsDrawing(false);
         setDraggingVertex(null);
@@ -396,7 +419,27 @@ function FullscreenParallelogram({ sideA, sideB, height, angle, unitSymbol, isVa
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleMouseUp}
                 onWheel={handleWheel}
-                style={{ cursor: activeTool === 'pen' ? 'crosshair' : (isDragging ? 'grabbing' : 'grab'), touchAction: 'none' }}
+                style={{ cursor: activeTool === 'pen' || activeTool === 'eraser' ? (activeTool === 'eraser' ? 'cell' : 'crosshair') : (isDragging ? 'grabbing' : 'grab'), touchAction: 'none' }}
+            />
+            <canvas
+                ref={drawingCanvasRef}
+                width={canvasSize.width}
+                height={canvasSize.height}
+                className="whiteboard-drawing-canvas"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleMouseUp}
+                onWheel={handleWheel}
+                style={{ 
+                    position: 'absolute', top: 0, left: 0, zIndex: 10,
+                    pointerEvents: (activeTool === 'pen' || activeTool === 'eraser') ? 'auto' : 'none',
+                    cursor: activeTool === 'eraser' ? 'cell' : 'crosshair',
+                    touchAction: 'none'
+                }}
             />
 
             <button className={`toolbar-toggle-btn ${isToolbarOpen ? 'open' : ''}`} onClick={() => setIsToolbarOpen(!isToolbarOpen)}>
@@ -485,13 +528,6 @@ function FullscreenParallelogram({ sideA, sideB, height, angle, unitSymbol, isVa
             )}
 
             {/* Save Button */}
-            <button className="whiteboard-save-btn" title="Saqlash">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                    <polyline points="17 21 17 13 7 13 7 21" />
-                    <polyline points="7 3 7 8 15 8" />
-                </svg>
-            </button>
 
             <button className="whiteboard-close-btn" onClick={onClose} title="Yopish">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 14h6v6" /><path d="M20 10h-6V4" /><path d="M14 10l7-7" /><path d="M3 21l7-7" /></svg>
@@ -503,46 +539,49 @@ function FullscreenParallelogram({ sideA, sideB, height, angle, unitSymbol, isVa
 // Parallelogramm Canvas komponenti
 function ParallelogramCanvas({ sideA, sideB, height, angle, showGrid, showHeight, showDiagonals, showAngles, showSides, showLabels, showCenter, showSymmetry, isValid }) {
     const canvasRef = useRef(null);
+    const [canvasSize, setCanvasSize] = useState({ width: 700, height: 550 });
+
+    useEffect(() => {
+        const updateSize = () => {
+            if (canvasRef.current && canvasRef.current.parentElement) {
+                const parent = canvasRef.current.parentElement;
+                setCanvasSize({ width: parent.clientWidth, height: parent.clientHeight });
+            }
+        };
+        updateSize();
+        window.addEventListener('resize', updateSize);
+        return () => window.removeEventListener('resize', updateSize);
+    }, []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
         const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const cHeight = canvas.height;
+        const width = canvasSize.width;
+        const cHeight = canvasSize.height;
 
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, width, cHeight);
 
+        // Grid
         if (showGrid) {
+            const gridSize = 25;
+            const offsetX = (width / 2) % gridSize;
+            const offsetY = (cHeight / 2) % gridSize;
             ctx.strokeStyle = '#1a1a24';
             ctx.lineWidth = 1;
-            const gridSize = 25;
-            for (let x = 0; x < width; x += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, cHeight);
-                ctx.stroke();
+            for (let x = offsetX; x < width; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
             }
-            for (let y = 0; y < cHeight; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
+            for (let x = offsetX - gridSize; x >= 0; x -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
             }
-            ctx.strokeStyle = '#2a2a38';
-            for (let x = 0; x < width; x += gridSize * 4) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, cHeight);
-                ctx.stroke();
+            for (let y = offsetY; y < cHeight; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
             }
-            for (let y = 0; y < cHeight; y += gridSize * 4) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
+            for (let y = offsetY - gridSize; y >= 0; y -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
             }
         }
 
@@ -776,9 +815,9 @@ function ParallelogramCanvas({ sideA, sideB, height, angle, showGrid, showHeight
             });
         }
 
-    }, [sideA, sideB, height, angle, showGrid, showHeight, showDiagonals, showAngles, showSides, showLabels, showCenter, showSymmetry, isValid]);
+    }, [sideA, sideB, height, angle, showGrid, showHeight, showDiagonals, showAngles, showSides, showLabels, showCenter, showSymmetry, isValid, canvasSize]);
 
-    return <canvas ref={canvasRef} width={700} height={550} className="triangle-canvas" />;
+    return <canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} className="triangle-canvas" style={{ display: 'block', width: '100%', height: '100%' }} />;
 }
 
 export function ParallelogrammPage() {
@@ -1331,3 +1370,4 @@ export function ParallelogrammPage() {
         </div>
     );
 }
+

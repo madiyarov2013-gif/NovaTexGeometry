@@ -167,6 +167,7 @@ export function KesikKonusPage() {
             if (d.isEraser) {
                 ctx.globalCompositeOperation = 'destination-out';
                 ctx.lineWidth = d.size;
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
             } else {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.strokeStyle = d.color;
@@ -184,6 +185,7 @@ export function KesikKonusPage() {
             if (activeTool === 'eraser') {
                 ctx.globalCompositeOperation = 'destination-out';
                 ctx.lineWidth = eraserSize;
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
             } else {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.strokeStyle = penColor;
@@ -682,9 +684,6 @@ export function KesikKonusPage() {
                                 <button className="whiteboard-action-btn clear-btn" onClick={clearAllDrawings} title="Tozalash">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                                 </button>
-                                <button className="whiteboard-action-btn save-btn" onClick={saveDrawing} title="Saqlash">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
-                                </button>
                                 <button className="whiteboard-action-btn refresh-btn" onClick={resetToInitial} title="Boshlang'ich holatga">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" /></svg>
                                 </button>
@@ -830,3 +829,5 @@ export function KesikKonusPage() {
         </div>
     );
 }
+
+

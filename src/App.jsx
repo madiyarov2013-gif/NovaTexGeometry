@@ -89,7 +89,7 @@ function App() {
             <Route path="/3d-models/piramida" element={<PiramidaPage />} />
             <Route path="/3d-models/silindr" element={<SilindrPage />} />
             <Route path="/3d-models/konus" element={<KonusPage />} />
-            <Route path="/3d-models/shar" element={<SharPage />} />
+            <Route path="/3d-models/shar" element={<SharPage />} /> 
             <Route path="/3d-models/konus-kesma" element={<KesikKonusPage />} />
             <Route path="/2d-models" element={<Shape2DGallery />} />
             <Route path="/2d-models/uchburchak" element={<UchburchakPage />} />
@@ -101,6 +101,7 @@ function App() {
             <Route path="/2d-models/romb" element={<RombPage />} />
             <Route path="/2d-models/muntazam-koburchak" element={<MuntazamKoburchakPage />} />
           </Routes>
+
         </BrowserRouter>
       </AuthProvider>
     </PerformanceProvider>
