@@ -921,10 +921,6 @@ export function MuntazamKoburchakPage() {
                 </div>
                 <div className="header-right-section">
                     <UserMenu />
-                    <div className="header-pro-badge">
-                        <span className="pro-crown">👑</span>
-                        <span className="pro-text">PRO</span>
-                    </div>
                 </div>
             </header>
 

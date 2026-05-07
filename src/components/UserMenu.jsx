@@ -38,10 +38,6 @@ export function UserMenu() {
 
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <button className="pro-badge upgrade-btn" onClick={() => setIsPricingOpen(true)} title="Tariflarni ko'rish" style={{ padding: '6px 12px', fontSize: '0.8rem', cursor: 'pointer' }}>
-                PRO <span style={{ textTransform: 'none', marginLeft: '4px', letterSpacing: 'normal', fontWeight: '500' }}>olish</span>
-            </button>
-
             <div className="user-menu" ref={menuRef}>
                 <button
                     className="user-menu-trigger"
@@ -82,47 +78,6 @@ export function UserMenu() {
                     </div>
                 )}
             </div>
-
-            {/* Pricing Modal */}
-            {isPricingOpen && (
-                <div className="pricing-modal-overlay" onClick={() => setIsPricingOpen(false)}>
-                    <div className="pricing-modal" onClick={e => e.stopPropagation()}>
-                        <button className="pricing-close" onClick={() => setIsPricingOpen(false)}>✕</button>
-                        <h2>Tariflar</h2>
-                        <p className="pricing-subtitle">O'zingizga mos tarifni tanlang va platformadan to'liq foydalaning</p>
-                        
-                        <div className="pricing-cards">
-                            <div className="pricing-card">
-                                <h3>Bepul</h3>
-                                <div className="price">0 <span>so'm / oy</span></div>
-                                <ul className="pricing-features">
-                                    <li>✓ Asosiy 2D shakllar</li>
-                                    <li>✓ Oddiy 3D modellar</li>
-                                    <li className="disabled">✕ Erkin Shakl Yaratish (Whiteboard)</li>
-                                    <li className="disabled">✕ Cheksiz hisob-kitoblar</li>
-                                </ul>
-                                <button className="plan-btn" onClick={() => setIsPricingOpen(false)}>Joriy tarif</button>
-                            </div>
-                            
-                            <div className="pricing-card pro-card">
-                                <div className="pro-label">Tavsiya etiladi</div>
-                                <h3>PRO</h3>
-                                <div className="price">49,000 <span>so'm / oy</span></div>
-                                <ul className="pricing-features">
-                                    <li>✓ Barcha 2D va 3D modellar</li>
-                                    <li>✓ Erkin Shakl Yaratish (Whiteboard)</li>
-                                    <li>✓ Barcha murakkab hisob-kitoblar</li>
-                                    <li>✓ Reklamasiz ishlash</li>
-                                </ul>
-                                <button className="plan-btn pro" onClick={() => {
-                                    alert('To\'lov tizimi tez orada ishga tushadi!');
-                                    setIsPricingOpen(false);
-                                }}>Sotib olish</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

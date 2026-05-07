@@ -940,13 +940,7 @@ export function TortburchakPage() {
                     </div>
                 </div>
                 <div className="header-right-section">
-                    {/* User Menu */}
                     <UserMenu />
-
-                    <div className="header-pro-badge">
-                        <span className="pro-crown">??</span>
-                        <span className="pro-text">PRO</span>
-                    </div>
                 </div>
             </header>
 

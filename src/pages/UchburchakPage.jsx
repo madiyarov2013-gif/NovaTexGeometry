@@ -1934,12 +1934,6 @@ export function UchburchakPage() {
                 <div className="header-right-section">
                     {/* User Menu */}
                     <UserMenu />
-
-                    {/* PRO Badge */}
-                    <div className="header-pro-badge">
-                        <span className="pro-crown">👑</span>
-                        <span className="pro-text">PRO</span>
-                    </div>
                 </div>
             </header>
 
