@@ -101,13 +101,15 @@ function Prizma3D({
                 />
             </mesh>
             {/* Wireframe overlay */}
-            <mesh
-                geometry={geometry}
-                rotation={[-Math.PI / 2, 0, 0]}
-                position={[0, -height / 2, 0]}
-            >
-                <meshBasicMaterial color="#a5b4fc" wireframe />
-            </mesh>
+            {showWireframe && (
+                <mesh
+                    geometry={geometry}
+                    rotation={[-Math.PI / 2, 0, 0]}
+                    position={[0, -height / 2, 0]}
+                >
+                    <meshBasicMaterial color="#a5b4fc" wireframe />
+                </mesh>
+            )}
 
             {/* Height Lines - Uchburchakdagi balandlik stilida */}
             {showHeight && (
@@ -245,20 +247,20 @@ function Prizma3D({
             )}
 
             {/* Base Diagonals - Uchburchakdagi chiziqlar stilida */}
-            {showBaseDiagonals && sides % 2 === 0 && (
+            {showBaseDiagonals && (
                 <group>
                     {baseVertices.map((vertex, i) => {
-                        // Juft burchaklar uchun: qarama-qarshi cho'qqi
-                        const oppositeIndex = (i + sides / 2) % sides;
-                        // Har bir diagonalni faqat bir marta chizamiz (i < sides/2)
-                        if (i < sides / 2) {
-                            const opposite = baseVertices[oppositeIndex];
-                            return (
+                        const diagonals = [];
+                        for (let j = i + 2; j < sides; j++) {
+                            // Qo'shni cho'qqilarni bog'lamaslik uchun
+                            if (i === 0 && j === sides - 1) continue;
+                            const target = baseVertices[j];
+                            diagonals.push(
                                 <Line
-                                    key={`diag-base-${i}`}
+                                    key={`diag-base-${i}-${j}`}
                                     points={[
                                         [vertex.x, vertex.y, -height/2],
-                                        [opposite.x, opposite.y, -height/2]
+                                        [target.x, target.y, -height/2]
                                     ]}
                                     color="#ec4899"
                                     lineWidth={2}
@@ -268,26 +270,26 @@ function Prizma3D({
                                 />
                             );
                         }
-                        return null;
+                        return diagonals;
                     })}
                 </group>
             )}
 
             {/* Space Diagonals - Fazoviy diagonallar */}
-            {showDiagonals && sides % 2 === 0 && (
+            {showDiagonals && (
                 <group>
                     {baseVertices.map((vertex, i) => {
-                        // Juft burchaklar uchun: pastki cho'qqidan yuqoridagi qarama-qarshi cho'qqiga
-                        const oppositeIndex = (i + sides / 2) % sides;
-                        // Har bir diagonalni faqat bir marta chizamiz (i < sides/2)
-                        if (i < sides / 2) {
-                            const opposite = baseVertices[oppositeIndex];
-                            return (
+                        const diagonals = [];
+                        for (let j = 0; j < sides; j++) {
+                            // Faqat bitta yoqda yotmagan cho'qqilarga (o'zi va qo'shnilariga emas)
+                            if (j === i || j === (i + 1) % sides || j === (i - 1 + sides) % sides) continue;
+                            const target = baseVertices[j];
+                            diagonals.push(
                                 <Line
-                                    key={`space-diag-${i}`}
+                                    key={`space-diag-${i}-${j}`}
                                     points={[
                                         [vertex.x, vertex.y, -height/2],
-                                        [opposite.x, opposite.y, height/2]
+                                        [target.x, target.y, height/2]
                                     ]}
                                     color="#f43f5e"
                                     lineWidth={2}
@@ -297,7 +299,7 @@ function Prizma3D({
                                 />
                             );
                         }
-                        return null;
+                        return diagonals;
                     })}
                 </group>
             )}
@@ -305,45 +307,34 @@ function Prizma3D({
             {/* Medians - Uchburchakdagi medianlar stilida */}
             {showMedians && (
                 <group>
-                    {baseVertices.map((vertex, i) => {
-                        const nextVertex = baseVertices[(i + 1) % sides];
-                        const midX = (vertex.x + nextVertex.x) / 2;
-                        const midY = (vertex.y + nextVertex.y) / 2;
-
-                        // Median: tomon o'rtasidan qarama-qarshi cho'qqiga
-                        // Qarama-qarshi cho'qqi indeksi
-                        const oppositeIndex = (i + Math.floor(sides / 2)) % sides;
-                        const opposite = baseVertices[oppositeIndex];
-
-                        return (
-                            <group key={`median-${i}`}>
-                                {/* Median pastki asosda */}
-                                <Line
-                                    points={[
-                                        [opposite.x, opposite.y, -height/2],
-                                        [midX, midY, -height/2]
-                                    ]}
-                                    color="#22c55e"
-                                    lineWidth={2}
-                                    transparent
-                                    opacity={0.7}
-                                    dashScale={2}
-                                />
-                                {/* Median yuqori asosda */}
-                                <Line
-                                    points={[
-                                        [opposite.x, opposite.y, height/2],
-                                        [midX, midY, height/2]
-                                    ]}
-                                    color="#22c55e"
-                                    lineWidth={2}
-                                    transparent
-                                    opacity={0.7}
-                                    dashScale={2}
-                                />
-                            </group>
-                        );
-                    })}
+                    {baseVertices.map((vertex, i) => (
+                        <group key={`median-${i}`}>
+                            {/* Median pastki asosda */}
+                            <Line
+                                points={[
+                                    [vertex.x, vertex.y, -height/2],
+                                    [0, 0, -height/2]
+                                ]}
+                                color="#22c55e"
+                                lineWidth={2}
+                                transparent
+                                opacity={0.7}
+                                dashScale={2}
+                            />
+                            {/* Median yuqori asosda */}
+                            <Line
+                                points={[
+                                    [vertex.x, vertex.y, height/2],
+                                    [0, 0, height/2]
+                                ]}
+                                color="#22c55e"
+                                lineWidth={2}
+                                transparent
+                                opacity={0.7}
+                                dashScale={2}
+                            />
+                        </group>
+                    ))}
                 </group>
             )}
 
@@ -801,79 +792,89 @@ export function PrizmaPage() {
                     {/* Vizualizatsiya - Uchburchak sahifasidan olingan */}
                     <div className="param-group viz-options">
                         <label>Vizualizatsiya</label>
-                        <div className="toggle-group">
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showWireframe}
-                                    onChange={(e) => setShowWireframe(e.target.checked)}
-                                />
-                                <span>Wireframe</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showGrid}
-                                    onChange={(e) => setShowGrid(e.target.checked)}
-                                />
-                                <span>Grid</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showAxes}
-                                    onChange={(e) => setShowAxes(e.target.checked)}
-                                />
-                                <span>O'qlar</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showAngles}
-                                    onChange={(e) => setShowAngles(e.target.checked)}
-                                />
-                                <span>Burchaklar</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showHeight}
-                                    onChange={(e) => setShowHeight(e.target.checked)}
-                                />
-                                <span>Balandlik</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showApothem}
-                                    onChange={(e) => setShowApothem(e.target.checked)}
-                                />
-                                <span>Apotema</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showBaseDiagonals}
-                                    onChange={(e) => setShowBaseDiagonals(e.target.checked)}
-                                />
-                                <span>Asos diagonali</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showDiagonals}
-                                    onChange={(e) => setShowDiagonals(e.target.checked)}
-                                />
-                                <span>Fazoviy diagonal</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showMedians}
-                                    onChange={(e) => setShowMedians(e.target.checked)}
-                                />
-                                <span>Medianlar</span>
-                            </label>
+                        
+                        <div className="viz-category">
+                            <h4 style={{ color: '#9ca3af', fontSize: '12px', marginBottom: '8px', marginTop: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Asosiy</h4>
+                            <div className="toggle-group">
+                                <label className="toggle-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={showWireframe}
+                                        onChange={(e) => setShowWireframe(e.target.checked)}
+                                    />
+                                    <span>Wireframe</span>
+                                </label>
+                                <label className="toggle-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={showGrid}
+                                        onChange={(e) => setShowGrid(e.target.checked)}
+                                    />
+                                    <span>Grid</span>
+                                </label>
+                                <label className="toggle-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={showAxes}
+                                        onChange={(e) => setShowAxes(e.target.checked)}
+                                    />
+                                    <span>O'qlar</span>
+                                </label>
+                                <label className="toggle-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={showAngles}
+                                        onChange={(e) => setShowAngles(e.target.checked)}
+                                    />
+                                    <span>Burchaklar</span>
+                                </label>
+                                <label className="toggle-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={showHeight}
+                                        onChange={(e) => setShowHeight(e.target.checked)}
+                                    />
+                                    <span>Balandlik</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="viz-category">
+                            <h4 style={{ color: '#9ca3af', fontSize: '12px', marginBottom: '8px', marginTop: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Qo'shimcha</h4>
+                            <div className="toggle-group">
+                                <label className="toggle-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={showApothem}
+                                        onChange={(e) => setShowApothem(e.target.checked)}
+                                    />
+                                    <span>Apotema</span>
+                                </label>
+                                <label className="toggle-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={showBaseDiagonals}
+                                        onChange={(e) => setShowBaseDiagonals(e.target.checked)}
+                                    />
+                                    <span>Asos diagonali</span>
+                                </label>
+                                <label className="toggle-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={showDiagonals}
+                                        onChange={(e) => setShowDiagonals(e.target.checked)}
+                                    />
+                                    <span>Fazoviy diagonal</span>
+                                </label>
+                                <label className="toggle-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={showMedians}
+                                        onChange={(e) => setShowMedians(e.target.checked)}
+                                    />
+                                    <span>Medianlar</span>
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </aside>
