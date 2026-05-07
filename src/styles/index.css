@@ -1197,6 +1197,8 @@ a {
   border-right: 1px solid var(--border-color);
   padding: var(--spacing-lg);
   overflow-y: auto;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .params-panel h2 {
@@ -3236,6 +3238,8 @@ a {
   flex: 1;
   display: grid;
   grid-template-columns: 320px 1fr 380px;
+  grid-template-rows: 100%;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -5101,6 +5105,9 @@ a {
   border-left: 1px solid rgba(139, 92, 246, 0.2);
   position: relative;
   overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
+  height: 100%;
 }
 
 /* Premium Header */
@@ -5319,6 +5326,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  padding-bottom: 100px;
 }
 
 /* Collapsible Sections */
@@ -5850,6 +5858,8 @@ a {
   border-right: 1px solid var(--border-color);
   position: relative;
   overflow-y: auto;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .pro-params-panel::before {
@@ -6764,6 +6774,8 @@ a {
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
+  min-height: 0;
+  height: 100%;
   padding: var(--spacing-lg) !important;
 }
 
@@ -6950,6 +6962,10 @@ a {
   gap: var(--spacing-xs);
 }
 
+.pro-type-grid-settings > .pro-settings-btn:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 /* PRO Sides Container */
 .pro-sides-container {
   display: flex;
@@ -7128,7 +7144,7 @@ a {
 /* PRO Section Content - prevents overflow */
 .pro-section-content {
   padding: var(--spacing-md);
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* PRO Sides Container */
@@ -11897,4 +11913,21 @@ input[type="number"]::-webkit-outer-spin-button {
 
 input[type="number"] {
   -moz-appearance: textfield !important;
+}
+
+/* Fix pro-side-item text wrapping and badge clipping */
+.pro-side-item .pro-side-info {
+  min-width: 0 !important;
+}
+
+.pro-side-item .pro-side-label,
+.pro-side-item .pro-side-desc {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: block !important;
+}
+
+.pro-side-item .pro-side-value {
+  flex-shrink: 0 !important;
 }
