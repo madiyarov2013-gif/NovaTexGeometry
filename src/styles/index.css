@@ -1051,7 +1051,7 @@ a {
   margin-bottom: var(--spacing-2xl);
 }
 
-.gallery-header>div {
+.gallery-header > div:nth-of-type(1) {
   flex: 1;
 }
 
