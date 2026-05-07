@@ -270,7 +270,7 @@ function Prizma3D({
                                 />
                             );
                         }
-                        return diagonals;
+                        return <group key={`base-diagonals-${i}`}>{diagonals}</group>;
                     })}
                 </group>
             )}
@@ -299,7 +299,7 @@ function Prizma3D({
                                 />
                             );
                         }
-                        return diagonals;
+                        return <group key={`space-diagonals-${i}`}>{diagonals}</group>;
                     })}
                 </group>
             )}
