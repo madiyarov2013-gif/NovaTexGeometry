@@ -789,94 +789,75 @@ export function PrizmaPage() {
                         />
                     </div>
 
-                    {/* Vizualizatsiya - Uchburchak sahifasidan olingan */}
-                    <div className="param-group viz-options">
-                        <label>Vizualizatsiya</label>
-                        
-                        <div className="viz-category">
-                            <h4 style={{ color: '#9ca3af', fontSize: '12px', marginBottom: '8px', marginTop: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Asosiy</h4>
-                            <div className="toggle-group">
-                                <label className="toggle-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={showWireframe}
-                                        onChange={(e) => setShowWireframe(e.target.checked)}
-                                    />
-                                    <span>Wireframe</span>
-                                </label>
-                                <label className="toggle-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={showGrid}
-                                        onChange={(e) => setShowGrid(e.target.checked)}
-                                    />
-                                    <span>Grid</span>
-                                </label>
-                                <label className="toggle-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={showAxes}
-                                        onChange={(e) => setShowAxes(e.target.checked)}
-                                    />
-                                    <span>O'qlar</span>
-                                </label>
-                                <label className="toggle-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={showAngles}
-                                        onChange={(e) => setShowAngles(e.target.checked)}
-                                    />
-                                    <span>Burchaklar</span>
-                                </label>
-                                <label className="toggle-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={showHeight}
-                                        onChange={(e) => setShowHeight(e.target.checked)}
-                                    />
-                                    <span>Balandlik</span>
-                                </label>
+                    {/* Ko'rinish - Professional UI */}
+                    <details className="pro-section settings-view-section" open>
+                        <summary className="pro-section-header">
+                            <div className="pro-section-icon">👁️</div>
+                            <span className="pro-section-title">Ko'rinish</span>
+                            <span className="pro-section-badge">{[showWireframe, showGrid, showAxes, showAngles, showHeight, showApothem, showBaseDiagonals, showDiagonals, showMedians].filter(Boolean).length}/9</span>
+                            <svg className="pro-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </summary>
+                        <div className="pro-section-content">
+                            <div className="pro-subsection">
+                                <h4 className="pro-subsection-title">📐 Asosiy</h4>
+                                <div className="pro-toggle-grid-settings">
+                                    <button className={`pro-toggle-item ${showGrid ? 'active' : ''}`} onClick={() => setShowGrid(!showGrid)}>
+                                        <span className="toggle-icon">⊞</span>
+                                        <span className="toggle-label">Grid</span>
+                                        <span className={`toggle-status ${showGrid ? 'on' : 'off'}`}>{showGrid ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showWireframe ? 'active' : ''}`} onClick={() => setShowWireframe(!showWireframe)}>
+                                        <span className="toggle-icon">🧊</span>
+                                        <span className="toggle-label">Wireframe</span>
+                                        <span className={`toggle-status ${showWireframe ? 'on' : 'off'}`}>{showWireframe ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showAxes ? 'active' : ''}`} onClick={() => setShowAxes(!showAxes)}>
+                                        <span className="toggle-icon">➕</span>
+                                        <span className="toggle-label">O'qlar</span>
+                                        <span className={`toggle-status ${showAxes ? 'on' : 'off'}`}>{showAxes ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showAngles ? 'active' : ''}`} onClick={() => setShowAngles(!showAngles)}>
+                                        <span className="toggle-icon">∠</span>
+                                        <span className="toggle-label">Burchaklar</span>
+                                        <span className={`toggle-status ${showAngles ? 'on' : 'off'}`}>{showAngles ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showHeight ? 'active' : ''}`} onClick={() => setShowHeight(!showHeight)}>
+                                        <span className="toggle-icon">↕️</span>
+                                        <span className="toggle-label">Balandlik</span>
+                                        <span className={`toggle-status ${showHeight ? 'on' : 'off'}`}>{showHeight ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
 
-                        <div className="viz-category">
-                            <h4 style={{ color: '#9ca3af', fontSize: '12px', marginBottom: '8px', marginTop: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Qo'shimcha</h4>
-                            <div className="toggle-group">
-                                <label className="toggle-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={showApothem}
-                                        onChange={(e) => setShowApothem(e.target.checked)}
-                                    />
-                                    <span>Apotema</span>
-                                </label>
-                                <label className="toggle-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={showBaseDiagonals}
-                                        onChange={(e) => setShowBaseDiagonals(e.target.checked)}
-                                    />
-                                    <span>Asos diagonali</span>
-                                </label>
-                                <label className="toggle-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={showDiagonals}
-                                        onChange={(e) => setShowDiagonals(e.target.checked)}
-                                    />
-                                    <span>Fazoviy diagonal</span>
-                                </label>
-                                <label className="toggle-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={showMedians}
-                                        onChange={(e) => setShowMedians(e.target.checked)}
-                                    />
-                                    <span>Medianlar</span>
-                                </label>
+                            <div className="pro-subsection" style={{ marginTop: '16px' }}>
+                                <h4 className="pro-subsection-title">✨ Qo'shimcha</h4>
+                                <div className="pro-toggle-grid-settings">
+                                    <button className={`pro-toggle-item ${showApothem ? 'active' : ''}`} onClick={() => setShowApothem(!showApothem)}>
+                                        <span className="toggle-icon">📏</span>
+                                        <span className="toggle-label">Apotema</span>
+                                        <span className={`toggle-status ${showApothem ? 'on' : 'off'}`}>{showApothem ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showBaseDiagonals ? 'active' : ''}`} onClick={() => setShowBaseDiagonals(!showBaseDiagonals)}>
+                                        <span className="toggle-icon">⤡</span>
+                                        <span className="toggle-label">Asos diagonali</span>
+                                        <span className={`toggle-status ${showBaseDiagonals ? 'on' : 'off'}`}>{showBaseDiagonals ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showDiagonals ? 'active' : ''}`} onClick={() => setShowDiagonals(!showDiagonals)}>
+                                        <span className="toggle-icon">🔮</span>
+                                        <span className="toggle-label">Fazoviy diagonal</span>
+                                        <span className={`toggle-status ${showDiagonals ? 'on' : 'off'}`}>{showDiagonals ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showMedians ? 'active' : ''}`} onClick={() => setShowMedians(!showMedians)}>
+                                        <span className="toggle-icon">◺</span>
+                                        <span className="toggle-label">Medianlar</span>
+                                        <span className={`toggle-status ${showMedians ? 'on' : 'off'}`}>{showMedians ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </details>
                 </aside>
 
                 {/* Markaz - 3D Sahna */}
