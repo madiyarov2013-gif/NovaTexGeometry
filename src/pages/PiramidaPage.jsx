@@ -132,7 +132,7 @@ function Piramida3D({
             )}
 
             {/* Base Diagonals */}
-            {showBaseDiagonals && (
+            {showBaseDiagonal && (
                 <group>
                     {baseVertices.map((vertex, i) => {
                         const diagonals = [];
@@ -266,7 +266,8 @@ export function PiramidaPage() {
     const [showAngles, setShowAngles] = useState(false);
     const [showHeight, setShowHeight] = useState(false);
     const [showApothem, setShowApothem] = useState(false);
-    const [showBaseDiagonals, setShowBaseDiagonals] = useState(false);
+    const [showBaseDiagonal, setShowBaseDiagonal] = useState(false);
+    const [showSpaceDiagonal, setShowSpaceDiagonal] = useState(false);
     const [showMedians, setShowMedians] = useState(false);
 
     // Hisob-kitoblar modali
@@ -666,7 +667,7 @@ export function PiramidaPage() {
                         <summary className="pro-section-header">
                             <div className="pro-section-icon">👁️</div>
                             <span className="pro-section-title">Ko'rinish</span>
-                            <span className="pro-section-badge">{[showWireframe, showGrid, showAxes, showAngles, showHeight, showApothem, showBaseDiagonals, showMedians].filter(Boolean).length}/8</span>
+                            <span className="pro-section-badge">{[showWireframe, showGrid, showAxes, showAngles, showHeight, showApothem, showBaseDiagonal, showSpaceDiagonal, showMedians].filter(Boolean).length}/9</span>
                             <svg className="pro-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <polyline points="6 9 12 15 18 9" />
                             </svg>
@@ -707,17 +708,22 @@ export function PiramidaPage() {
                                 <h4 className="pro-subsection-title">✨ Qo'shimcha</h4>
                                 <div className="pro-toggle-grid-settings">
                                     <button className={`pro-toggle-item ${showApothem ? 'active' : ''}`} onClick={() => setShowApothem(!showApothem)}>
-                                        <span className="toggle-icon">📏</span>
+                                        <span className="toggle-icon">✏️</span>
                                         <span className="toggle-label">Apotema</span>
                                         <span className={`toggle-status ${showApothem ? 'on' : 'off'}`}>{showApothem ? 'ON' : 'OFF'}</span>
                                     </button>
-                                    <button className={`pro-toggle-item ${showBaseDiagonals ? 'active' : ''}`} onClick={() => setShowBaseDiagonals(!showBaseDiagonals)}>
+                                    <button className={`pro-toggle-item ${showBaseDiagonal ? 'active' : ''}`} onClick={() => setShowBaseDiagonal(!showBaseDiagonal)}>
                                         <span className="toggle-icon">⤡</span>
                                         <span className="toggle-label">Asos diagonali</span>
-                                        <span className={`toggle-status ${showBaseDiagonals ? 'on' : 'off'}`}>{showBaseDiagonals ? 'ON' : 'OFF'}</span>
+                                        <span className={`toggle-status ${showBaseDiagonal ? 'on' : 'off'}`}>{showBaseDiagonal ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showSpaceDiagonal ? 'active' : ''}`} onClick={() => setShowSpaceDiagonal(!showSpaceDiagonal)}>
+                                        <span className="toggle-icon">🔮</span>
+                                        <span className="toggle-label">Fazoviy diagonal</span>
+                                        <span className={`toggle-status ${showSpaceDiagonal ? 'on' : 'off'}`}>{showSpaceDiagonal ? 'ON' : 'OFF'}</span>
                                     </button>
                                     <button className={`pro-toggle-item ${showMedians ? 'active' : ''}`} onClick={() => setShowMedians(!showMedians)}>
-                                        <span className="toggle-icon">◺</span>
+                                        <span className="toggle-icon">📐</span>
                                         <span className="toggle-label">Medianlar</span>
                                         <span className={`toggle-status ${showMedians ? 'on' : 'off'}`}>{showMedians ? 'ON' : 'OFF'}</span>
                                     </button>
