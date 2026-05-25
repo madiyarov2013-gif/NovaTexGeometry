@@ -3,8 +3,8 @@
 import { Link } from 'react-router-dom';
 import { UserMenu } from '../components/UserMenu';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Grid, Environment, PerspectiveCamera, Line, Text, Html } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
+import { OrbitControls, Grid, Environment, PerspectiveCamera, Line, Text, Html, Billboard } from '@react-three/drei';
+
 import * as THREE from 'three';
 
 // O'lchov birliklari
@@ -18,12 +18,28 @@ const COLOR_PALETTE = [
     '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280', '#000000'
 ];
 
-// 3D Prizma komponenti
-function Prizma3D({ sides, sideLength, height, tiltAngle, showWireframe, showDimensions }) {
-    const geometry = useMemo(() => {
-        const shape = new THREE.Shape();
-        const radius = sideLength / (2 * Math.sin(Math.PI / sides));
+// 3D Prizma komponenti - Uchburchak sahifasidan olingan dizayn bilan
+function Prizma3D({
+    sides,
+    sideLength,
+    height,
+    tiltAngle,
+    showWireframe,
+    showDimensions,
+    fillColor,
+    showAngles,
+    showHeight,
+    showDiagonals,
+    showApothem,
+    showMedians,
+    showBaseDiagonals,
+    unitSymbol,
+    isFullscreen
+}) {
 
+    const geometry = useMemo(() => {
+        const radius = sideLength / (2 * Math.sin(Math.PI / sides));
+        const shape = new THREE.Shape();
         for (let i = 0; i < sides; i++) {
             const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
             const x = Math.cos(angle) * radius;
@@ -48,6 +64,26 @@ function Prizma3D({ sides, sideLength, height, tiltAngle, showWireframe, showDim
     // Og'ish burchagi (radianlar)
     const tiltRad = (tiltAngle * Math.PI) / 180;
     const radius = sideLength / (2 * Math.sin(Math.PI / sides));
+    const apothem = radius * Math.cos(Math.PI / sides);
+    const centerAngle = (360 / sides);
+    const interiorAngle = (sides - 2) * 180 / sides;
+
+    // Material color based on fill type
+    const materialColor = fillColor === 'gradient' ? '#6366f1' : fillColor;
+
+    // Generate base vertices for lines
+    const baseVertices = useMemo(() => {
+        const vertices = [];
+        for (let i = 0; i < sides; i++) {
+            const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
+            vertices.push({
+                x: Math.cos(angle) * radius,
+                y: Math.sin(angle) * radius,
+                angle: angle
+            });
+        }
+        return vertices;
+    }, [sides, radius]);
 
     return (
         <group rotation={[tiltRad, 0, 0]}>
@@ -58,54 +94,271 @@ function Prizma3D({ sides, sideLength, height, tiltAngle, showWireframe, showDim
                 position={[0, -height / 2, 0]}
             >
                 <meshStandardMaterial
-                    color="#6366f1"
+                    color={materialColor}
                     transparent
                     opacity={showWireframe ? 0.15 : 0.6}
                     side={THREE.DoubleSide}
                 />
             </mesh>
             {/* Wireframe overlay */}
-            <mesh
-                geometry={geometry}
-                rotation={[-Math.PI / 2, 0, 0]}
-                position={[0, -height / 2, 0]}
-            >
-                <meshBasicMaterial color="#a5b4fc" wireframe />
-            </mesh>
+            {showWireframe && (
+                <mesh
+                    geometry={geometry}
+                    rotation={[-Math.PI / 2, 0, 0]}
+                    position={[0, -height / 2, 0]}
+                >
+                    <meshBasicMaterial color="#a5b4fc" wireframe />
+                </mesh>
+            )}
 
-            {/* Dimension Labels */}
+            {/* Height Lines - Uchburchakdagi balandlik stilida */}
+            {showHeight && (
+                <group>
+                    {/* Yon balandlik chiziqlari */}
+                    {baseVertices.map((vertex, i) => (
+                        <Line
+                            key={`height-${i}`}
+                            points={[
+                                [vertex.x, vertex.y, -height/2],
+                                [vertex.x, vertex.y, height/2]
+                            ]}
+                            color="#f59e0b"
+                            lineWidth={2}
+                            transparent
+                            opacity={0.8}
+                        />
+                    ))}
+                    {/* Markaziy balandlik */}
+                    <Line
+                        points={[[0, 0, -height/2], [0, 0, height/2]]}
+                        color="#ef4444"
+                        lineWidth={3}
+                        transparent
+                        opacity={0.9}
+                    />
+                    <Billboard position={[0.5, 0, 0]}>
+                        <Text
+                            fontSize={0.5}
+                            color="#ef4444"
+                            anchorX="left"
+                        >
+                            h = {height} {unitSymbol}
+                        </Text>
+                    </Billboard>
+                    
+                </group>
+            )}
+
+            {/* Base Angles - Uchburchakdagi burchaklar stilida */}
+            {showAngles && (
+                <group>
+                    {/* Asos burchaklari yoylari */}
+                    {baseVertices.map((vertex, i) => {
+                        const nextVertex = baseVertices[(i + 1) % sides];
+                        const prevVertex = baseVertices[(i + sides - 1) % sides];
+
+                        // Burchak yoyi uchun nuqtalar
+                        const arcRadius = Math.min(sideLength * 0.3, 1.5);
+                        const points = [];
+                        const segments = 16;
+                        const startAngle = Math.atan2(prevVertex.y - vertex.y, prevVertex.x - vertex.x);
+                        const endAngle = Math.atan2(nextVertex.y - vertex.y, nextVertex.x - vertex.x);
+
+                        for (let j = 0; j <= segments; j++) {
+                            const t = j / segments;
+                            const angle = startAngle + (endAngle - startAngle) * t;
+                            points.push([
+                                vertex.x + Math.cos(angle) * arcRadius,
+                                vertex.y + Math.sin(angle) * arcRadius,
+                                -height/2 + 0.1
+                            ]);
+                        }
+
+                        return (
+                            <group key={`angle-${i}`}>
+                                <Line
+                                    points={points}
+                                    color="#8b5cf6"
+                                    lineWidth={2}
+                                    transparent
+                                    opacity={0.7}
+                                />
+                                <Billboard
+                                    position={[
+                                        vertex.x + Math.cos((startAngle + endAngle) / 2) * (arcRadius + 0.8),
+                                        vertex.y + Math.sin((startAngle + endAngle) / 2) * (arcRadius + 0.8),
+                                        -height/2 + 0.1
+                                    ]}
+                                >
+                                    <Text
+                                        fontSize={0.3}
+                                        color="#8b5cf6"
+                                        anchorX="center"
+                                    >
+                                        {interiorAngle.toFixed(0)}\u00B0
+                                    </Text>
+                                </Billboard>
+                                
+                            </group>
+                        );
+                    })}
+                </group>
+            )}
+
+            {/* Apothem Lines - Uchburchakdagi chiziqlar stilida */}
+            {showApothem && (
+                <group>
+                    {baseVertices.map((vertex, i) => {
+                        const nextVertex = baseVertices[(i + 1) % sides];
+                        const midX = (vertex.x + nextVertex.x) / 2;
+                        const midY = (vertex.y + nextVertex.y) / 2;
+
+                        return (
+                            <group key={`apothem-${i}`}>
+                                <Line
+                                    points={[[0, 0, -height/2], [midX, midY, -height/2]]}
+                                    color="#06b6d4"
+                                    lineWidth={2}
+                                    transparent
+                                    opacity={0.8}
+                                    dashScale={2}
+                                />
+                                <Line
+                                    points={[[0, 0, height/2], [midX, midY, height/2]]}
+                                    color="#06b6d4"
+                                    lineWidth={2}
+                                    transparent
+                                    opacity={0.8}
+                                    dashScale={2}
+                                />
+                            </group>
+                        );
+                    })}
+                    <Billboard position={[0, -radius - 0.5, -height/2]}>
+                        <Text
+                            fontSize={0.35}
+                            color="#06b6d4"
+                            anchorX="center"
+                        >
+                            a_p = {apothem.toFixed(2)} {unitSymbol}
+                        </Text>
+                    </Billboard>
+                </group>
+            )}
+
+            {/* Base Diagonals - Uchburchakdagi chiziqlar stilida */}
+            {showBaseDiagonals && (
+                <group>
+                    {baseVertices.map((vertex, i) => {
+                        const diagonals = [];
+                        for (let j = i + 2; j < sides; j++) {
+                            // Qo'shni cho'qqilarni bog'lamaslik uchun
+                            if (i === 0 && j === sides - 1) continue;
+                            const target = baseVertices[j];
+                            diagonals.push(
+                                <Line
+                                    key={`diag-base-${i}-${j}`}
+                                    points={[
+                                        [vertex.x, vertex.y, -height/2],
+                                        [target.x, target.y, -height/2]
+                                    ]}
+                                    color="#ec4899"
+                                    lineWidth={2}
+                                    transparent
+                                    opacity={0.6}
+                                    dashScale={3}
+                                />
+                            );
+                        }
+                        return <group key={`base-diagonals-${i}`}>{diagonals}</group>;
+                    })}
+                </group>
+            )}
+
+            {/* Space Diagonals - Fazoviy diagonallar */}
+            {showDiagonals && (
+                <group>
+                    {baseVertices.map((vertex, i) => {
+                        const diagonals = [];
+                        for (let j = 0; j < sides; j++) {
+                            // Faqat bitta yoqda yotmagan cho'qqilarga (o'zi va qo'shnilariga emas)
+                            if (j === i || j === (i + 1) % sides || j === (i - 1 + sides) % sides) continue;
+                            const target = baseVertices[j];
+                            diagonals.push(
+                                <Line
+                                    key={`space-diag-${i}-${j}`}
+                                    points={[
+                                        [vertex.x, vertex.y, -height/2],
+                                        [target.x, target.y, height/2]
+                                    ]}
+                                    color="#f43f5e"
+                                    lineWidth={2}
+                                    transparent
+                                    opacity={0.5}
+                                    dashScale={4}
+                                />
+                            );
+                        }
+                        return <group key={`space-diagonals-${i}`}>{diagonals}</group>;
+                    })}
+                </group>
+            )}
+
+            {/* Medians - Uchburchakdagi medianlar stilida */}
+            {showMedians && (
+                <group>
+                    {baseVertices.map((vertex, i) => (
+                        <group key={`median-${i}`}>
+                            {/* Median pastki asosda */}
+                            <Line
+                                points={[
+                                    [vertex.x, vertex.y, -height/2],
+                                    [0, 0, -height/2]
+                                ]}
+                                color="#22c55e"
+                                lineWidth={2}
+                                transparent
+                                opacity={0.7}
+                                dashScale={2}
+                            />
+                            {/* Median yuqori asosda */}
+                            <Line
+                                points={[
+                                    [vertex.x, vertex.y, height/2],
+                                    [0, 0, height/2]
+                                ]}
+                                color="#22c55e"
+                                lineWidth={2}
+                                transparent
+                                opacity={0.7}
+                                dashScale={2}
+                            />
+                        </group>
+                    ))}
+                </group>
+            )}
+
+            {/* Dimension Labels - Uchburchakdagi label dizayni */}
             {showDimensions && (
                 <group>
-                    {/* Height Label */}
-                    <group position={[radius + 1, 0, 0]}>
-                        <Line
-                            points={[[0, -height/2, 0], [0, height/2, 0]]}
-                            color="#ffffff"
-                            lineWidth={1}
-                            transparent
-                            opacity={0.5}
-                        />
+                    <Billboard position={[0, -radius - 0.5, -height/2]}>
                         <Text
-                            position={[0.5, 0, 0]}
-                            fontSize={0.6}
-                            color="#ffffff"
-                            anchorX="left"
-                            rotation={[0, -Math.PI / 4, 0]}
+                            fontSize={0.4}
+                            color="#10b981"
+                            anchorX="center"
                         >
-                            h = {height}
+                            a = {sideLength} {unitSymbol}
                         </Text>
-                    </group>
-
-                    {/* Side Label */}
-                    <group position={[0, -height/2 - 0.5, radius]}>
+                    </Billboard>
+                    <Billboard position={[radius/2, 0, -height/2]}>
                         <Text
-                            fontSize={0.6}
-                            color="#a5b4fc"
-                            rotation={[-Math.PI / 2, 0, 0]}
+                            fontSize={0.35}
+                            color="#3b82f6"
+                            anchorX="center"
                         >
-                            a = {sideLength}
+                            R = {radius.toFixed(2)} {unitSymbol}
                         </Text>
-                    </group>
+                    </Billboard>
                 </group>
             )}
         </group>
@@ -129,10 +382,16 @@ export function PrizmaPage() {
         setUnit(newUnit);
     };
 
-    // Vizualizatsiya sozlamalari
+    // Vizualizatsiya sozlamalari - Uchburchak sahifasidan olingan
     const [showWireframe, setShowWireframe] = useState(false);
     const [showGrid, setShowGrid] = useState(true);
     const [showAxes, setShowAxes] = useState(true);
+    const [showAngles, setShowAngles] = useState(false);
+    const [showHeight, setShowHeight] = useState(true);
+    const [showDiagonals, setShowDiagonals] = useState(false);
+    const [showApothem, setShowApothem] = useState(false);
+    const [showMedians, setShowMedians] = useState(false);
+    const [showBaseDiagonals, setShowBaseDiagonals] = useState(false);
 
     // Hisob-kitoblar modali
     const [showCalcModal, setShowCalcModal] = useState(false);
@@ -153,17 +412,28 @@ export function PrizmaPage() {
     const [rotateSpeed, setRotateSpeed] = useState(2);
     const [theme, setTheme] = useState('dark');
     const [showExploded, setShowExploded] = useState(false);
+    const [prizmaFillColor, setPrizmaFillColor] = useState('gradient');
+    const [toast, setToast] = useState({ show: false, message: '' });
     const canvasContainerRef = useRef(null);
     const drawingCanvasRef = useRef(null);
     const controlsRef = useRef(null);
     const scenePanelRef = useRef(null);
-    const [canvasSize, setCanvasSize] = useState({ width: 1200, height: 800 });
+    const [canvasSize, setCanvasSize] = useState(() =>
+        typeof window !== 'undefined' ? { width: window.innerWidth, height: window.innerHeight } : { width: 1200, height: 800 }
+    );
     const drawMode = activeTool === 'pen' || activeTool === 'eraser';
 
     useEffect(() => {
         const handleKeyDown = (e) => {
-            if (e.key === 'Escape' && isFullscreen) {
-                setIsFullscreen(false);
+            if (e.key === 'Escape') {
+                if (showCalcModal) {
+                    setShowCalcModal(false);
+                    return;
+                }
+                if (isFullscreen) {
+                    setIsFullscreen(false);
+                    return;
+                }
             }
             // Pro Shortcuts
             if (isFullscreen) {
@@ -176,12 +446,29 @@ export function PrizmaPage() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isFullscreen, showCalcModal]);
+
+    // Body scroll ni full screen da bloklash
+    useEffect(() => {
+        if (isFullscreen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
     }, [isFullscreen]);
 
     // Chizish funksiyalari
     useEffect(() => {
         const updateSize = () => {
-            if (canvasContainerRef.current) {
+            if (isFullscreen) {
+                setCanvasSize({
+                    width: window.innerWidth,
+                    height: window.innerHeight
+                });
+            } else if (canvasContainerRef.current) {
                 setCanvasSize({
                     width: canvasContainerRef.current.clientWidth,
                     height: canvasContainerRef.current.clientHeight
@@ -206,6 +493,7 @@ export function PrizmaPage() {
             if (d.isEraser) {
                 ctx.globalCompositeOperation = 'destination-out';
                 ctx.lineWidth = d.size;
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
             } else {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.strokeStyle = d.color;
@@ -223,6 +511,7 @@ export function PrizmaPage() {
             if (activeTool === 'eraser') {
                 ctx.globalCompositeOperation = 'destination-out';
                 ctx.lineWidth = eraserSize;
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
             } else {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.strokeStyle = penColor;
@@ -371,10 +660,10 @@ export function PrizmaPage() {
             {/* Header */}
             <header className="prizma-header">
                 <Link to="/3d-models" className="back-btn">
-                    ← Orqaga
+                    &#8592; Orqaga
                 </Link>
                 <div className="header-title">
-                    <h1>⬡ Prizma</h1>
+                    <h1>&#11041; Prizma</h1>
                     <p>To'g'ri prizma - professional modellashtirish</p>
                 </div>
                 <UserMenu />
@@ -384,7 +673,7 @@ export function PrizmaPage() {
             <div className="prizma-content">
                 {/* Chap Panel - Parametrlar */}
                 <aside className="params-panel">
-                    <h2>📏 Parametrlar</h2>
+                    <h2>&#128207; Parametrlar</h2>
 
                     {/* O'lchov birligi */}
                     <div className="param-group">
@@ -422,7 +711,7 @@ export function PrizmaPage() {
                                     onChange={(e) => setSides(Math.max(3, Math.min(12, parseInt(e.target.value) || 3)))}
                                 />
                                 <span className="shape-preview">
-                                    {sides === 3 ? '△' : sides === 4 ? '□' : sides === 5 ? '⬠' : sides === 6 ? '⬡' : `${sides}-burchak`}
+                                    {sides === 3 ? '\u25B3' : sides === 4 ? '\u25A1' : sides === 5 ? '\u2B20' : sides === 6 ? '\u2B21' : null}
                                 </span>
                             </div>
                         </div>
@@ -478,7 +767,7 @@ export function PrizmaPage() {
 
                     {/* Og'ish burchagi */}
                     <div className="param-group">
-                        <label>Og'ish burchagi (α)</label>
+                        <label>Og'ish burchagi (&alpha;)</label>
                         <div className="input-with-unit">
                             <input
                                 type="number"
@@ -488,7 +777,7 @@ export function PrizmaPage() {
                                 value={tiltAngle}
                                 onChange={(e) => setTiltAngle(parseFloat(e.target.value) || 0)}
                             />
-                            <span className="unit-label">°</span>
+                            <span className="unit-label">&deg;</span>
                         </div>
                         <input
                             type="range"
@@ -500,36 +789,75 @@ export function PrizmaPage() {
                         />
                     </div>
 
-                    {/* Vizualizatsiya */}
-                    <div className="param-group viz-options">
-                        <label>Vizualizatsiya</label>
-                        <div className="toggle-group">
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showWireframe}
-                                    onChange={(e) => setShowWireframe(e.target.checked)}
-                                />
-                                <span>Wireframe</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showGrid}
-                                    onChange={(e) => setShowGrid(e.target.checked)}
-                                />
-                                <span>Grid</span>
-                            </label>
-                            <label className="toggle-item">
-                                <input
-                                    type="checkbox"
-                                    checked={showAxes}
-                                    onChange={(e) => setShowAxes(e.target.checked)}
-                                />
-                                <span>O'qlar</span>
-                            </label>
+                    {/* Ko'rinish - Professional UI */}
+                    <details className="pro-section settings-view-section" open>
+                        <summary className="pro-section-header">
+                            <div className="pro-section-icon">👁️</div>
+                            <span className="pro-section-title">Ko'rinish</span>
+                            <span className="pro-section-badge">{[showWireframe, showGrid, showAxes, showAngles, showHeight, showApothem, showBaseDiagonals, showDiagonals, showMedians].filter(Boolean).length}/9</span>
+                            <svg className="pro-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </summary>
+                        <div className="pro-section-content">
+                            <div className="pro-subsection">
+                                <h4 className="pro-subsection-title">📐 Asosiy</h4>
+                                <div className="pro-toggle-grid-settings">
+                                    <button className={`pro-toggle-item ${showGrid ? 'active' : ''}`} onClick={() => setShowGrid(!showGrid)}>
+                                        <span className="toggle-icon">⊞</span>
+                                        <span className="toggle-label">Grid</span>
+                                        <span className={`toggle-status ${showGrid ? 'on' : 'off'}`}>{showGrid ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showWireframe ? 'active' : ''}`} onClick={() => setShowWireframe(!showWireframe)}>
+                                        <span className="toggle-icon">🧊</span>
+                                        <span className="toggle-label">Wireframe</span>
+                                        <span className={`toggle-status ${showWireframe ? 'on' : 'off'}`}>{showWireframe ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showAxes ? 'active' : ''}`} onClick={() => setShowAxes(!showAxes)}>
+                                        <span className="toggle-icon">➕</span>
+                                        <span className="toggle-label">O'qlar</span>
+                                        <span className={`toggle-status ${showAxes ? 'on' : 'off'}`}>{showAxes ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showAngles ? 'active' : ''}`} onClick={() => setShowAngles(!showAngles)}>
+                                        <span className="toggle-icon">∠</span>
+                                        <span className="toggle-label">Burchaklar</span>
+                                        <span className={`toggle-status ${showAngles ? 'on' : 'off'}`}>{showAngles ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showHeight ? 'active' : ''}`} onClick={() => setShowHeight(!showHeight)}>
+                                        <span className="toggle-icon">↕️</span>
+                                        <span className="toggle-label">Balandlik</span>
+                                        <span className={`toggle-status ${showHeight ? 'on' : 'off'}`}>{showHeight ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="pro-subsection" style={{ marginTop: '16px' }}>
+                                <h4 className="pro-subsection-title">✨ Qo'shimcha</h4>
+                                <div className="pro-toggle-grid-settings">
+                                    <button className={`pro-toggle-item ${showApothem ? 'active' : ''}`} onClick={() => setShowApothem(!showApothem)}>
+                                        <span className="toggle-icon">📏</span>
+                                        <span className="toggle-label">Apotema</span>
+                                        <span className={`toggle-status ${showApothem ? 'on' : 'off'}`}>{showApothem ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showBaseDiagonals ? 'active' : ''}`} onClick={() => setShowBaseDiagonals(!showBaseDiagonals)}>
+                                        <span className="toggle-icon">⤡</span>
+                                        <span className="toggle-label">Asos diagonali</span>
+                                        <span className={`toggle-status ${showBaseDiagonals ? 'on' : 'off'}`}>{showBaseDiagonals ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showDiagonals ? 'active' : ''}`} onClick={() => setShowDiagonals(!showDiagonals)}>
+                                        <span className="toggle-icon">🔮</span>
+                                        <span className="toggle-label">Fazoviy diagonal</span>
+                                        <span className={`toggle-status ${showDiagonals ? 'on' : 'off'}`}>{showDiagonals ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button className={`pro-toggle-item ${showMedians ? 'active' : ''}`} onClick={() => setShowMedians(!showMedians)}>
+                                        <span className="toggle-icon">◺</span>
+                                        <span className="toggle-label">Medianlar</span>
+                                        <span className={`toggle-status ${showMedians ? 'on' : 'off'}`}>{showMedians ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    </details>
                 </aside>
 
                 {/* Markaz - 3D Sahna */}
@@ -551,6 +879,14 @@ export function PrizmaPage() {
                                 tiltAngle={tiltAngle}
                                 showWireframe={showWireframe}
                                 showDimensions={true}
+                                fillColor={prizmaFillColor}
+                                showAngles={showAngles}
+                                showHeight={showHeight}
+                                showDiagonals={showDiagonals}
+                                showApothem={showApothem}
+                                showMedians={showMedians}
+                                showBaseDiagonals={showBaseDiagonals}
+                                unitSymbol={unitSymbol}
                             />
                         </group>
 
@@ -573,7 +909,7 @@ export function PrizmaPage() {
                             dampingFactor={0.05}
                             minDistance={5}
                             maxDistance={150}
-                            
+                            enablePan={true}
                         />
                     </Canvas>
 
@@ -584,274 +920,224 @@ export function PrizmaPage() {
                     </button>
                 </section>
 
-                {/* Fullscreen 3D Modal - Professional with Drawing */}
+                {/* Fullscreen - 2D Whiteboard Style */}
                 {isFullscreen && (
-                    <div className="fullscreen-3d-modal" ref={canvasContainerRef}>
-                        {/* 2D Whiteboard Toolbar */}
-                        {/* Image-Based Custom Toolbar for Prizma */}
-                        <div className={`prizma-pro-toolbar ${isToolbarOpen ? 'open' : ''}`}>
-                            <button className={`toolbar-toggle-btn ${isToolbarOpen ? 'open' : ''}`} onClick={() => setIsToolbarOpen(!isToolbarOpen)}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    {isToolbarOpen ? <path d="M18 6L6 18M6 6l12 12" /> : <><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" /></>}
-                                </svg>
-                            </button>
-                            
-                            <div className="prizma-toolbar-inner">
-                                {/* Top Row - Tools */}
-                                <div className="p-toolbar-section p-tools-row">
-                                    <button className={`p-tool-btn ${activeTool === 'view' && !isLocked ? 'active' : ''}`} onClick={() => setActiveTool('view')} title="Ko'rish">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                                    </button>
-                                    <button className={`p-tool-btn ${activeTool === 'pen' ? 'active' : ''}`} onClick={() => setActiveTool('pen')} title="Qalam">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /></svg>
-                                    </button>
-                                    <button className={`p-tool-btn ${activeTool === 'eraser' ? 'active' : ''}`} onClick={() => setActiveTool('eraser')} title="O'chirgich">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20H7L3 16C2 15 2 13 3 12L13 2L22 11L20 20Z" /></svg>
-                                    </button>
-                                    <button className={`p-tool-btn ${isLocked ? 'active' : ''}`} onClick={() => setIsLocked(!isLocked)} title={isLocked ? "Qulfni ochish" : "Qulflash"}>
-                                        {isLocked ? (
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-                                        ) : (
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
-                                        )}
-                                    </button>
-                                </div>
+                    <div className="fullscreen-whiteboard" ref={canvasContainerRef}>
+                        {/* 3D Canvas - Background */}
+                        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}>
+                            <Canvas shadows>
+                                <PerspectiveCamera makeDefault position={[15, 12, 15]} fov={50} />
+                                <ambientLight intensity={theme === 'dark' ? 0.4 : 0.6} />
+                                <directionalLight position={[10, 15, 5]} intensity={theme === 'dark' ? 1 : 0.8} castShadow />
+                                <pointLight position={[-10, -10, -10]} intensity={theme === 'dark' ? 0.3 : 0.2} color="#60a5fa" />
+                                <Environment preset="city" />
+                                <group scale={renderScale}>
+                                    <Prizma3D
+                                        sides={sides}
+                                        sideLength={sideLength}
+                                        height={height}
+                                        tiltAngle={tiltAngle}
+                                        showWireframe={showWireframe}
+                                        showDimensions={true}
+                                        fillColor={prizmaFillColor}
+                                        showAngles={showAngles}
+                                        showHeight={showHeight}
+                                        showDiagonals={showDiagonals}
+                                        showApothem={showApothem}
+                                        showMedians={showMedians}
+                                        showBaseDiagonals={showBaseDiagonals}
+                                        unitSymbol={unitSymbol}
+                                        isFullscreen={true}
+                                    />
+                                </group>
+                                {showGrid && (
+                                    <Grid infiniteGrid fadeDistance={50} fadeStrength={5} cellSize={1} cellColor={theme === 'dark' ? "#404040" : "#cccccc"} sectionSize={5} sectionColor={theme === 'dark' ? "#606060" : "#999999"} />
+                                )}
+                                {showAxes && <axesHelper args={[10]} />}
+                                <OrbitControls
+                                    ref={controlsRef}
+                                    enableDamping
+                                    dampingFactor={0.05}
+                                    minDistance={5}
+                                    maxDistance={150}
+                                    autoRotate={autoRotate && !isLocked && !drawMode}
+                                    autoRotateSpeed={rotateSpeed}
+                                    enableZoom={!isLocked && !drawMode}
+                                    enableRotate={!isLocked && !drawMode}
+                                    enablePan={!isLocked && !drawMode}
+                                />
+                            </Canvas>
+                        </div>
 
-                                {/* Zoom & Refresh Row */}
-                                <div className="p-toolbar-section p-zoom-row">
-                                    <button className="p-tool-btn p-zoom-btn" onClick={() => { if(controlsRef.current) { controlsRef.current.dollyIn(1.2); controlsRef.current.update(); } }} title="Yaqinlashtirish">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
-                                    </button>
-                                    <div className="p-zoom-badge">100%</div>
-                                    <button className="p-tool-btn p-zoom-btn" onClick={() => { if(controlsRef.current) { controlsRef.current.dollyOut(1.2); controlsRef.current.update(); } }} title="Uzoqlashtirish">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
-                                    </button>
-                                    <button className="p-tool-btn p-refresh-btn" onClick={resetToInitial} title="Boshlang'ich holatga">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" /></svg>
-                                    </button>
-                                </div>
+                        {/* Drawing Canvas Overlay - Foreground */}
+                        <canvas
+                            ref={drawingCanvasRef}
+                            width={canvasSize.width}
+                            height={canvasSize.height}
+                            className="whiteboard-drawing-canvas"
+                            onMouseDown={handleDrawStart}
+                            onMouseMove={handleDrawMove}
+                            onMouseUp={handleDrawEnd}
+                            onMouseLeave={handleDrawEnd}
+                            onTouchStart={handleDrawStart}
+                            onTouchMove={handleDrawMove}
+                            onTouchEnd={handleDrawEnd}
+                            onTouchCancel={handleDrawEnd}
+                            style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                zIndex: 10,
+                                pointerEvents: drawMode ? 'auto' : 'none',
+                                cursor: activeTool === 'pen' ? 'crosshair' : activeTool === 'eraser' ? 'cell' : 'default',
+                                touchAction: 'none'
+                            }}
+                        />
 
-                                {/* Color Palette */}
-                                <div className="p-toolbar-section p-color-palette">
-                                    {COLOR_PALETTE.slice(0, 10).map(color => (
-                                        <button 
-                                            key={color} 
-                                            className={`p-color-dot ${penColor === color ? 'active' : ''}`} 
-                                            style={{ backgroundColor: color }} 
-                                            onClick={() => setPenColor(color)} 
-                                            title={`Rang: ${color}`}
-                                        />
+
+
+                        {/* Toast Notification */}
+                        <div className={`toast-notification ${toast.show ? 'show' : ''}`}>
+                            <span className="toast-icon">&#128276;</span>
+                            <span className="toast-message">{toast.message}</span>
+                        </div>
+
+                        {/* Toolbar Toggle Button */}
+                        <button className={`toolbar-toggle-btn ${isToolbarOpen ? 'open' : ''}`} onClick={() => setIsToolbarOpen(!isToolbarOpen)} title={isToolbarOpen ? 'Menyuni yopish' : 'Menyuni ochish'}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                {isToolbarOpen ? <path d="M18 6L6 18M6 6l12 12" /> : <><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" /></>}
+                            </svg>
+                        </button>
+
+                        {/* 2D Whiteboard Toolbar - O'ng tomonda */}
+                        <div className={`whiteboard-toolbar ${isToolbarOpen ? 'open' : ''}`}>
+                            <div className="toolbar-section tools-row">
+                                <button className={`toolbar-btn ${activeTool === 'view' ? 'active' : ''}`} onClick={() => setActiveTool('view')} title="Ko'rish">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                                </button>
+                                <button className={`toolbar-btn ${activeTool === 'pen' ? 'active' : ''}`} onClick={() => setActiveTool('pen')} title="Qalam">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /></svg>
+                                </button>
+                                <button className={`toolbar-btn ${activeTool === 'eraser' ? 'active' : ''}`} onClick={() => setActiveTool('eraser')} title="O'chirgich">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 20H7L3 16C2 15 2 13 3 12L13 2L22 11L20 20Z" /></svg>
+                                </button>
+                                <button className={`toolbar-btn ${isLocked ? 'active locked' : ''}`} onClick={() => { setIsLocked(!isLocked); setToast({ show: true, message: isLocked ? 'Qulfdan chiqarildi' : "Qulflandi" }); setTimeout(() => setToast({ show: false, message: '' }), 2000); }} title={isLocked ? 'Qulfni ochish' : 'Qulflash'}>
+                                    {isLocked ? (
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                                    ) : (
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
+                                    )}
+                                </button>
+                            </div>
+
+                            <div className="toolbar-divider" />
+
+                            <div className="toolbar-section zoom-section">
+                                <button className="toolbar-btn" onClick={() => { if(controlsRef.current) { controlsRef.current.dollyIn(1.2); controlsRef.current.update(); } }} disabled={isLocked} title="Yaqinlashtirish">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
+                                </button>
+                                <span className="zoom-level">100%</span>
+                                <button className="toolbar-btn" onClick={() => { if(controlsRef.current) { controlsRef.current.dollyOut(1.2); controlsRef.current.update(); } }} disabled={isLocked} title="Uzoqlashtirish">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
+                                </button>
+                                <button className="toolbar-btn" onClick={resetToInitial} disabled={isLocked} title="Qayta o'rnatish">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>
+                                </button>
+                            </div>
+
+                            <div className="toolbar-divider" />
+
+                            <div className="toolbar-section color-section">
+                                <div className="color-palette">
+                                    {COLOR_PALETTE.map(color => (
+                                        <button key={color} className={`color-btn ${penColor === color ? 'active' : ''}`} style={{ backgroundColor: color }} onClick={() => setPenColor(color)} title={`Rang: ${color}`} />
                                     ))}
                                 </div>
+                            </div>
 
-                                {/* Thickness Slider */}
-                                <div className="p-toolbar-section p-slider-section">
-                                    <div className="p-slider-label">QALINLIK:</div>
-                                    <input 
-                                        type="range" 
-                                        min="1" 
-                                        max="50" 
-                                        value={activeTool === 'eraser' ? eraserSize : penSize} 
-                                        onChange={(e) => activeTool === 'eraser' ? setEraserSize(parseInt(e.target.value)) : setPenSize(parseInt(e.target.value))} 
-                                        className="p-slider-input" 
-                                    />
-                                    <div className="p-slider-value">{activeTool === 'eraser' ? eraserSize : penSize}px</div>
+                            <div className="toolbar-divider" />
+
+                            <div className="toolbar-section size-section">
+                                <span className="size-label">{activeTool === 'eraser' ? "O'chirgich:" : "Qalinlik:"}</span>
+                                <input type="range" min="1" max={activeTool === 'eraser' ? "100" : "50"} value={activeTool === 'eraser' ? eraserSize : penSize} onChange={(e) => activeTool === 'eraser' ? setEraserSize(parseInt(e.target.value)) : setPenSize(parseInt(e.target.value))} className="size-slider" />
+                                <span className="size-value">{activeTool === 'eraser' ? eraserSize : penSize}px</span>
+                            </div>
+
+                            <div className="toolbar-divider" />
+
+                            <div className="toolbar-section fill-section">
+                                <span className="fill-label">Prizma:</span>
+                                <div className="fill-buttons">
+                                    <button className={`fill-btn ${prizmaFillColor === 'gradient' ? 'active' : ''}`} onClick={() => setPrizmaFillColor('gradient')} title="Gradient">
+                                        <span className="gradient-preview"></span>
+                                    </button>
+                                    {COLOR_PALETTE.slice(0, 5).map(color => (
+                                        <button key={`fill-${color}`} className={`fill-btn ${prizmaFillColor === color ? 'active' : ''}`} style={{ backgroundColor: color }} onClick={() => setPrizmaFillColor(color)} title={`Bo'yash: ${color}`} />
+                                    ))}
                                 </div>
                             </div>
 
-                            {/* Floating Action Buttons */}
-                            <div className="p-floating-actions">
-                                <button className="p-action-btn p-clear-btn" onClick={clearAllDrawings} title="Tozalash">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            <div className="toolbar-divider" />
+
+                            <div className="whiteboard-actions">
+                                <button className="whiteboard-action-btn clear-btn" onClick={clearAllDrawings} title="Tozalash">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                                 </button>
-                                <button className="p-action-btn p-save-btn" onClick={saveDrawing} title="Saqlash">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
-                                </button>
-                                <button className="p-action-btn p-exit-btn" onClick={() => setIsFullscreen(false)} title="Chiqish">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6" /><path d="M9 21H3v-6" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" /></svg>
+                                <button className="whiteboard-action-btn refresh-btn" onClick={resetToInitial} title="Boshlang'ich holatga">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" /></svg>
                                 </button>
                             </div>
                         </div>
-                        
-                        {/* Drawing Canvas Overlay */}
-                        <canvas
-                                ref={drawingCanvasRef}
-                                width={canvasSize.width}
-                                height={canvasSize.height}
-                                className="whiteboard-drawing-canvas"
-                                onMouseDown={handleDrawStart}
-                                onMouseMove={handleDrawMove}
-                                onMouseUp={handleDrawEnd}
-                                onMouseLeave={handleDrawEnd}
-                                onTouchStart={(e) => { e.preventDefault(); handleDrawStart(e); }}
-                                onTouchMove={(e) => { e.preventDefault(); handleDrawMove(e); }}
-                                onTouchEnd={handleDrawEnd}
-                                onTouchCancel={handleDrawEnd}
-                                style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    zIndex: 5,
-                                    pointerEvents: drawMode ? 'auto' : 'none',
-                                    cursor: drawMode ? 'crosshair' : 'default',
-                                    touchAction: 'none'
-                                }}
-                            />
 
-                        {/* 3D Canvas */}
-                        <Canvas shadows style={{ background: theme === 'dark' ? 'transparent' : '#f0f0f0' }}>
-                            <PerspectiveCamera makeDefault position={[15, 12, 15]} fov={50} />
-                            <ambientLight intensity={theme === 'dark' ? 0.4 : 0.6} />
-                            <directionalLight position={[10, 15, 5]} intensity={theme === 'dark' ? 1 : 0.8} castShadow />
-                            <pointLight position={[-10, -10, -10]} intensity={theme === 'dark' ? 0.3 : 0.2} color="#60a5fa" />
-                            <Environment preset="city" />
-                            <group scale={renderScale}>
-                                <Prizma3D
-                                    sides={sides}
-                                    sideLength={sideLength}
-                                    height={height}
-                                    tiltAngle={tiltAngle}
-                                    showWireframe={showWireframe}
-                                    showDimensions={true}
-                                />
-                            </group>
-                            {showGrid && (
-                                <Grid infiniteGrid fadeDistance={50} fadeStrength={5} cellSize={1} cellColor={theme === 'dark' ? "#404040" : "#cccccc"} sectionSize={5} sectionColor={theme === 'dark' ? "#606060" : "#999999"} />
-                            )}
-                            {showAxes && <axesHelper args={[10]} />}
-                            <OrbitControls
-                                ref={controlsRef}
-                                enableDamping
-                                dampingFactor={0.05}
-                                minDistance={5}
-                                maxDistance={150}
-                                
-                                autoRotate={autoRotate && !isLocked && !drawMode}
-                                autoRotateSpeed={rotateSpeed}
-                                enableZoom={!isLocked && !drawMode}
-                                enableRotate={!isLocked && !drawMode}
-                                enablePan={!isLocked && !drawMode}
-                            />
-                        </Canvas>
+                        {/* Lock Indicator */}
+                        {isLocked && <div className="lock-indicator">&#128274; Qulfli rejim</div>}
 
-                        {/* SVG Drawing Layer */}
-                        
-
-                        <button className="close-btn" onClick={() => setIsFullscreen(false)}>✕</button>
-
-                        {/* Right Side PRO Panel */}
-                        <div className="fullscreen-right-panel">
-                            <div className="panel-header">
-                                <span className="panel-icon">⚙️</span>
-                                <span className="panel-title">Boshqaruv</span>
-                            </div>
-
-                            <div className="panel-content">
-                                {/* Section: Parameters */}
-                                <div className="panel-section">
-                                    <h4 className="section-title">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19L2 19L2 2L22 19Z" /></svg>
-                                        PARAMETRLAR
-                                    </h4>
-                                    <div className="param-cards">
-                                        <div className="param-mini">
-                                            <span className="param-icon">n</span>
-                                            <span className="param-val">{sides}</span>
-                                        </div>
-                                        <div className="param-mini">
-                                            <span className="param-icon">a</span>
-                                            <span className="param-val">{sideLength}{unitSymbol}</span>
-                                        </div>
-                                        <div className="param-mini">
-                                            <span className="param-icon">h</span>
-                                            <span className="param-val">{height}{unitSymbol}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Section: Results */}
-                                <div className="panel-section">
-                                    <h4 className="section-title">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="14" width="4" height="6" /><rect x="10" y="10" width="4" height="10" /><rect x="17" y="6" width="4" height="14" /></svg>
-                                        HISOB-KITOBLAR
-                                    </h4>
-                                    <div className="calc-mini-grid">
-                                        <div className="calc-mini-item">
-                                            <span className="calc-mini-label">HAJM (V)</span>
-                                            <span className="calc-mini-value">{calculations.volume} <span className="calc-mini-unit">{unitSymbol}³</span></span>
-                                        </div>
-                                        <div className="calc-mini-item">
-                                            <span className="calc-mini-label">TO'LIQ SIRT</span>
-                                            <span className="calc-mini-value">{calculations.totalArea} <span className="calc-mini-unit">{unitSymbol}²</span></span>
-                                        </div>
-                                        <div className="calc-mini-item">
-                                            <span className="calc-mini-label">ASOS YUZASI</span>
-                                            <span className="calc-mini-value">{calculations.baseArea} <span className="calc-mini-unit">{unitSymbol}²</span></span>
-                                        </div>
-                                        <div className="calc-mini-item">
-                                            <span className="calc-mini-label">YON SIRT</span>
-                                            <span className="calc-mini-value">{calculations.lateralArea} <span className="calc-mini-unit">{unitSymbol}²</span></span>
-                                        </div>
-                                        <div className="calc-mini-item">
-                                            <span className="calc-mini-label">PERIMETR</span>
-                                            <span className="calc-mini-value">{calculations.perimeter} <span className="calc-mini-unit">{unitSymbol}</span></span>
-                                        </div>
-                                        <div className="calc-mini-item">
-                                            <span className="calc-mini-label">APOTEMA</span>
-                                            <span className="calc-mini-value">{calculations.apothem} <span className="calc-mini-unit">{unitSymbol}</span></span>
-                                        </div>
-                                        <div className="calc-mini-item">
-                                            <span className="calc-mini-label">ASOS D</span>
-                                            <span className="calc-mini-value">{calculations.diagonalBase} <span className="calc-mini-unit">{unitSymbol}</span></span>
-                                        </div>
-                                        <div className="calc-mini-item">
-                                            <span className="calc-mini-label">FAZOVIY D</span>
-                                            <span className="calc-mini-value">{calculations.diagonalSpace} <span className="calc-mini-unit">{unitSymbol}</span></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        {/* Close Button */}
+                        <button className="whiteboard-close-btn" onClick={() => setIsFullscreen(false)} title="Yopish">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 14h6v6" /><path d="M20 10h-6V4" /><path d="M14 10l7-7" /><path d="M3 21l7-7" /></svg>
+                        </button>
                     </div>
                 )}
 
                 {/* O'ng Panel - Formulalar */}
                 <aside className="formulas-panel">
-                    <h2>📐 Matematik Ma'lumotlar</h2>
+                    <h2>&#128208; Matematik Ma'lumotlar</h2>
 
                     {/* Joriy qiymatlar */}
                     <div className="calc-section">
                         <h3>Hisob-kitoblar</h3>
                         <div className="calc-grid">
-                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Hajmi (V)', value: `${calculations.volume} ${unitSymbol}³`, formula: 'V = S_asos × h', description: `V = ${calculations.baseArea} × ${height} = ${calculations.volume} ${unitSymbol}³` }); setShowCalcModal(true); }}>
+                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Hajmi (V)', value: `${calculations.volume} ${unitSymbol}\u00B3`, formula: 'V = S_asos \u00D7 h', description: `V = ${calculations.baseArea} \u00D7 ${height} = ${calculations.volume} ${unitSymbol}\u00B3` }); setShowCalcModal(true); }}>
                                 <span className="calc-label">Hajmi (V)</span>
-                                <span className="calc-value">{calculations.volume} {unitSymbol}³</span>
+                                <span className="calc-value">{calculations.volume} {unitSymbol}&sup3;</span>
                             </div>
-                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: "To'liq sirt (S)", value: `${calculations.totalArea} ${unitSymbol}²`, formula: 'S = 2×S_asos + S_yon', description: `S = 2×${calculations.baseArea} + ${calculations.lateralArea} = ${calculations.totalArea} ${unitSymbol}²` }); setShowCalcModal(true); }}>
+                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: "To'liq sirt (S)", value: `${calculations.totalArea} ${unitSymbol}\u00B2`, formula: 'S = 2\u00D7S_asos + S_yon', description: `S = 2\u00D7${calculations.baseArea} + ${calculations.lateralArea} = ${calculations.totalArea} ${unitSymbol}\u00B2` }); setShowCalcModal(true); }}>
                                 <span className="calc-label">To'liq sirt (S)</span>
-                                <span className="calc-value">{calculations.totalArea} {unitSymbol}²</span>
+                                <span className="calc-value">{calculations.totalArea} {unitSymbol}&sup2;</span>
                             </div>
-                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Asos yuzasi', value: `${calculations.baseArea} ${unitSymbol}²`, formula: 'S = (n × a × apotema) / 2', description: `S = (${sides} × ${sideLength} × ${calculations.apothem}) / 2 = ${calculations.baseArea} ${unitSymbol}²` }); setShowCalcModal(true); }}>
+                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Asos yuzasi', value: `${calculations.baseArea} ${unitSymbol}\u00B2`, formula: 'S = (n \u00D7 a \u00D7 apotema) / 2', description: `S = (${sides} \u00D7 ${sideLength} \u00D7 ${calculations.apothem}) / 2 = ${calculations.baseArea} ${unitSymbol}\u00B2` }); setShowCalcModal(true); }}>
                                 <span className="calc-label">Asos yuzasi</span>
-                                <span className="calc-value">{calculations.baseArea} {unitSymbol}²</span>
+                                <span className="calc-value">{calculations.baseArea} {unitSymbol}&sup2;</span>
                             </div>
-                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Yon sirt', value: `${calculations.lateralArea} ${unitSymbol}²`, formula: 'S_yon = P × h', description: `S = ${calculations.perimeter} × ${height} = ${calculations.lateralArea} ${unitSymbol}²` }); setShowCalcModal(true); }}>
+                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Yon sirt', value: `${calculations.lateralArea} ${unitSymbol}\u00B2`, formula: 'S_yon = P \u00D7 h', description: `S = ${calculations.perimeter} \u00D7 ${height} = ${calculations.lateralArea} ${unitSymbol}\u00B2` }); setShowCalcModal(true); }}>
                                 <span className="calc-label">Yon sirt</span>
-                                <span className="calc-value">{calculations.lateralArea} {unitSymbol}²</span>
+                                <span className="calc-value">{calculations.lateralArea} {unitSymbol}&sup2;</span>
                             </div>
-                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Perimetr', value: `${calculations.perimeter} ${unitSymbol}`, formula: 'P = n × a', description: `P = ${sides} × ${sideLength} = ${calculations.perimeter} ${unitSymbol}` }); setShowCalcModal(true); }}>
+                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Perimetr', value: `${calculations.perimeter} ${unitSymbol}`, formula: 'P = n \u00D7 a', description: `P = ${sides} \u00D7 ${sideLength} = ${calculations.perimeter} ${unitSymbol}` }); setShowCalcModal(true); }}>
                                 <span className="calc-label">Perimetr</span>
                                 <span className="calc-value">{calculations.perimeter} {unitSymbol}</span>
                             </div>
-                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Apotema', value: `${calculations.apothem} ${unitSymbol}`, formula: 'a_p = R × cos(π/n)', description: `Apotema = ${calculations.radius} × cos(π/${sides}) = ${calculations.apothem} ${unitSymbol}` }); setShowCalcModal(true); }}>
+                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Apotema', value: `${calculations.apothem} ${unitSymbol}`, formula: 'a_p = R \u00D7 cos(\u03C0/n)', description: `Apotema = ${calculations.radius} \u00D7 cos(\u03C0/${sides}) = ${calculations.apothem} ${unitSymbol}` }); setShowCalcModal(true); }}>
                                 <span className="calc-label">Apotema</span>
                                 <span className="calc-value">{calculations.apothem} {unitSymbol}</span>
                             </div>
-                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Asos diagonali', value: `${calculations.diagonalBase} ${unitSymbol}`, formula: 'd = 2R', description: `d = 2 × ${calculations.radius} = ${calculations.diagonalBase} ${unitSymbol}` }); setShowCalcModal(true); }}>
+                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Asos diagonali', value: `${calculations.diagonalBase} ${unitSymbol}`, formula: 'd = 2R', description: `d = 2 \u00D7 ${calculations.radius} = ${calculations.diagonalBase} ${unitSymbol}` }); setShowCalcModal(true); }}>
                                 <span className="calc-label">Asos diagonali</span>
                                 <span className="calc-value">{calculations.diagonalBase} {unitSymbol}</span>
                             </div>
-                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Fazoviy diagonal', value: `${calculations.diagonalSpace} ${unitSymbol}`, formula: 'D = √(d² + h²)', description: `D = √(${calculations.diagonalBase}² + ${height}²) = ${calculations.diagonalSpace} ${unitSymbol}` }); setShowCalcModal(true); }}>
+                            <div className="calc-item clickable" onClick={() => { setSelectedCalc({ label: 'Fazoviy diagonal', value: `${calculations.diagonalSpace} ${unitSymbol}`, formula: 'D = \u221A(d\u00B2 + h\u00B2)', description: `D = \u221A(${calculations.diagonalBase}\u00B2 + ${height}\u00B2) = ${calculations.diagonalSpace} ${unitSymbol}` }); setShowCalcModal(true); }}>
                                 <span className="calc-label">Fazoviy diagonal</span>
                                 <span className="calc-value">{calculations.diagonalSpace} {unitSymbol}</span>
                             </div>
@@ -864,25 +1150,25 @@ export function PrizmaPage() {
 
                         <div className="formula-card">
                             <div className="formula-title">Hajm</div>
-                            <div className="formula-eq">V = S<sub>asos</sub> × h</div>
+                            <div className="formula-eq">V = S<sub>asos</sub> &times; h</div>
                             <div className="formula-desc">
-                                V = {calculations.baseArea} × {height} = {calculations.volume} {unitSymbol}³
+                                V = {calculations.baseArea} &times; {height} = {calculations.volume} {unitSymbol}&sup3;
                             </div>
                         </div>
 
                         <div className="formula-card">
                             <div className="formula-title">Asos yuzasi (muntazam {sides}-burchak)</div>
-                            <div className="formula-eq">S = (n × a × apotema) / 2</div>
+                            <div className="formula-eq">S = (n &times; a &times; apotema) / 2</div>
                             <div className="formula-desc">
-                                S = ({sides} × {sideLength} × {calculations.apothem}) / 2 = {calculations.baseArea} {unitSymbol}²
+                                S = ({sides} &times; {sideLength} &times; {calculations.apothem}) / 2 = {calculations.baseArea} {unitSymbol}&sup2;
                             </div>
                         </div>
 
                         <div className="formula-card">
                             <div className="formula-title">Yon sirt maydoni</div>
-                            <div className="formula-eq">S<sub>yon</sub> = P × h</div>
+                            <div className="formula-eq">S<sub>yon</sub> = P &times; h</div>
                             <div className="formula-desc">
-                                S = {calculations.perimeter} × {height} = {calculations.lateralArea} {unitSymbol}²
+                                S = {calculations.perimeter} &times; {height} = {calculations.lateralArea} {unitSymbol}&sup2;
                             </div>
                         </div>
 
@@ -890,7 +1176,7 @@ export function PrizmaPage() {
                             <div className="formula-title">To'liq sirt maydoni</div>
                             <div className="formula-eq">S<sub>to'liq</sub> = 2S<sub>asos</sub> + S<sub>yon</sub></div>
                             <div className="formula-desc">
-                                S = 2×{calculations.baseArea} + {calculations.lateralArea} = {calculations.totalArea} {unitSymbol}²
+                                S = 2&times;{calculations.baseArea} + {calculations.lateralArea} = {calculations.totalArea} {unitSymbol}&sup2;
                             </div>
                         </div>
                     </div>
@@ -900,9 +1186,9 @@ export function PrizmaPage() {
                         <h3>Xossalar</h3>
                         <ul className="properties-list">
                             <li>Asoslari parallel va teng {sides}-burchaklar</li>
-                            <li>Yon yuzalar — {sides} ta to'g'ri to'rtburchak</li>
+                            <li>Yon yuzalar &mdash; {sides} ta to'g'ri to'rtburchak</li>
                             <li>Yon qirralar parallel va teng</li>
-                            <li>{sides === 4 ? "To'rtburchakli prizma — parallelepiped" : `${sides}-burchakli prizma`}</li>
+                            <li>{sides === 4 ? "To'rtburchakli prizma \u2014 parallelepiped" : `${sides}-burchakli prizma`}</li>
                         </ul>
                     </div>
                 </aside>
@@ -918,7 +1204,7 @@ export function PrizmaPage() {
                                 <path d="M18 6L6 18M6 6l12 12" />
                             </svg>
                         </button>
-                        <div className="calc-modal-icon">📊</div>
+                        <div className="calc-modal-icon">&#128202;</div>
                         <h3 className="calc-modal-title">{selectedCalc.label}</h3>
                         <div className="calc-modal-value">{selectedCalc.value}</div>
                         <div className="calc-modal-formula">
@@ -935,3 +1221,16 @@ export function PrizmaPage() {
         </div>
     );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

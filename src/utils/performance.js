@@ -17,9 +17,9 @@ export const isLowPerformanceDevice = () => {
     const connection = navigator.connection;
     if (connection && connection.effectiveType === '2g') return true;
 
-    // Check screen size (electronic whiteboards are often large but low-res)
+    // Check screen size (only flag very low pixel ratio as low-performance)
     const pixelRatio = window.devicePixelRatio || 1;
-    if (pixelRatio < 1.5 && window.innerWidth > 1200) return true;
+    if (pixelRatio < 1 && window.innerWidth > 1200) return true;
 
     return false;
 };

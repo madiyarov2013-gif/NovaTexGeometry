@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { UserMenu } from '../components/UserMenu';
 
@@ -6,8 +6,7 @@ import { UserMenu } from '../components/UserMenu';
 const UNITS = {
     mm: { name: 'Millimetr', symbol: 'mm', factor: 0.001 },
     sm: { name: 'Santimetr', symbol: 'sm', factor: 0.01 },
-    m: { name: 'Metr', symbol: 'm', factor: 1 },
-    km: { name: 'Kilometr', symbol: 'km', factor: 1000 }
+    m: { name: 'Metr', symbol: 'm', factor: 1 }
 };
 
 const COLORS = {
@@ -26,6 +25,7 @@ const COLOR_PALETTE = [
 // Professional Fullscreen Rectangle Whiteboard
 function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onSizeChange }) {
     const canvasRef = useRef(null);
+    const drawingCanvasRef = useRef(null);
     const containerRef = useRef(null);
 
     const [scale, setScale] = useState(1);
@@ -45,6 +45,7 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
     const [eraserSize, setEraserSize] = useState(20);
     const [draggingVertex, setDraggingVertex] = useState(null);
     const [toast, setToast] = useState({ show: false, message: '' });
+    const [rectangleFillColor, setRectangleFillColor] = useState('gradient');
 
     useEffect(() => {
         const updateSize = () => {
@@ -115,18 +116,22 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             ctx.shadowColor = 'rgba(99, 102, 241, 0.5)';
             ctx.shadowBlur = 40 / scale;
 
-            const gradient = ctx.createLinearGradient(points[0].x, points[0].y, points[2].x, points[2].y);
-            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.35)');
-            gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.3)');
-            gradient.addColorStop(1, 'rgba(99, 102, 241, 0.35)');
-
             ctx.beginPath();
             ctx.moveTo(points[0].x, points[0].y);
             ctx.lineTo(points[1].x, points[1].y);
             ctx.lineTo(points[2].x, points[2].y);
             ctx.lineTo(points[3].x, points[3].y);
             ctx.closePath();
-            ctx.fillStyle = gradient;
+
+            if (rectangleFillColor === 'gradient') {
+                const gradient = ctx.createLinearGradient(points[0].x, points[0].y, points[2].x, points[2].y);
+                gradient.addColorStop(0, 'rgba(99, 102, 241, 0.35)');
+                gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.3)');
+                gradient.addColorStop(1, 'rgba(99, 102, 241, 0.35)');
+                ctx.fillStyle = gradient;
+            } else {
+                ctx.fillStyle = rectangleFillColor + '80';
+            }
             ctx.fill();
 
             ctx.shadowColor = 'transparent';
@@ -200,6 +205,17 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             });
         }
         ctx.restore();
+    }, [scale, offset, width, height, canvasSize, rectangleData, unitSymbol, rectangleFillColor]);
+
+    // Drawing canvas
+    useEffect(() => {
+        const canvas = drawingCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const cWidth = canvas.width;
+        const cHeight = canvas.height;
+
+        ctx.clearRect(0, 0, cWidth, cHeight);
 
         // Draw paths
         drawings.forEach(d => {
@@ -208,7 +224,9 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             ctx.translate(cWidth / 2, cHeight / 2);
             ctx.scale(scale, scale);
             ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
-            ctx.strokeStyle = d.color;
+            
+            ctx.globalCompositeOperation = d.isEraser ? 'destination-out' : 'source-over';
+            ctx.strokeStyle = d.isEraser ? 'rgba(0,0,0,1)' : d.color;
             ctx.lineWidth = d.size / scale;
             ctx.lineCap = 'round';
             ctx.beginPath();
@@ -223,8 +241,10 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             ctx.translate(cWidth / 2, cHeight / 2);
             ctx.scale(scale, scale);
             ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
-            ctx.strokeStyle = penColor;
-            ctx.lineWidth = penSize / scale;
+            
+            ctx.globalCompositeOperation = activeTool === 'eraser' ? 'destination-out' : 'source-over';
+            ctx.strokeStyle = activeTool === 'eraser' ? 'rgba(0,0,0,1)' : penColor;
+            ctx.lineWidth = (activeTool === 'eraser' ? eraserSize : penSize) / scale;
             ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(currentPath[0].x, currentPath[0].y);
@@ -232,7 +252,7 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
             ctx.stroke();
             ctx.restore();
         }
-    }, [scale, offset, width, height, canvasSize, rectangleData, drawings, currentPath, penColor, penSize, unitSymbol]);
+    }, [drawings, currentPath, scale, offset, penColor, penSize, eraserSize, activeTool, canvasSize]);
 
     const getCanvasCoords = (e) => {
         const canvas = canvasRef.current;
@@ -320,7 +340,12 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
 
     const handleMouseUp = () => {
         if (isDrawing && currentPath.length > 1) {
-            setDrawings(prev => [...prev, { points: currentPath, color: penColor, size: penSize }]);
+            setDrawings(prev => [...prev, { 
+                points: currentPath, 
+                color: penColor, 
+                size: activeTool === 'eraser' ? eraserSize : penSize,
+                isEraser: activeTool === 'eraser'
+            }]);
         }
         setIsDrawing(false);
         setDraggingVertex(null);
@@ -372,7 +397,27 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleMouseUp}
                 onWheel={handleWheel}
-                style={{ cursor: activeTool === 'pen' ? 'crosshair' : (isDragging ? 'grabbing' : 'grab'), touchAction: 'none' }}
+                style={{ cursor: activeTool === 'pen' || activeTool === 'eraser' ? (activeTool === 'eraser' ? 'cell' : 'crosshair') : (isDragging ? 'grabbing' : 'grab'), touchAction: 'none' }}
+            />
+            <canvas
+                ref={drawingCanvasRef}
+                width={canvasSize.width}
+                height={canvasSize.height}
+                className="whiteboard-drawing-canvas"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleMouseUp}
+                onWheel={handleWheel}
+                style={{ 
+                    position: 'absolute', top: 0, left: 0, zIndex: 10,
+                    pointerEvents: (activeTool === 'pen' || activeTool === 'eraser') ? 'auto' : 'none',
+                    cursor: activeTool === 'eraser' ? 'cell' : 'crosshair',
+                    touchAction: 'none'
+                }}
             />
 
             <button className={`toolbar-toggle-btn ${isToolbarOpen ? 'open' : ''}`} onClick={() => setIsToolbarOpen(!isToolbarOpen)}>
@@ -428,6 +473,18 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
                     <span className="size-value">{activeTool === 'eraser' ? eraserSize : penSize}px</span>
                 </div>
                 <div className="toolbar-divider" />
+                <div className="toolbar-section fill-section">
+                    <span className="fill-label">To'rtburchak:</span>
+                    <div className="fill-buttons">
+                        <button className={`fill-btn ${rectangleFillColor === 'gradient' ? 'active' : ''}`} onClick={() => setRectangleFillColor('gradient')} title="Gradient">
+                            <span className="gradient-preview"></span>
+                        </button>
+                        {COLOR_PALETTE.slice(0, 5).map(color => (
+                            <button key={`fill-${color}`} className={`fill-btn ${rectangleFillColor === color ? 'active' : ''}`} style={{ backgroundColor: color }} onClick={() => setRectangleFillColor(color)} title={`Bo'yash: ${color}`} />
+                        ))}
+                    </div>
+                </div>
+                <div className="toolbar-divider" />
                 <div className="whiteboard-actions">
                     <button className="whiteboard-action-btn clear-btn" onClick={() => setDrawings([])} title="Tozalash">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
@@ -437,25 +494,18 @@ function FullscreenRectangleWhiteboard({ width, height, unitSymbol, onClose, onS
 
             {/* Toast notification */}
             <div className={`toast-notification ${toast.show ? 'show' : ''}`}>
-                <span className="toast-icon">⚠️</span>
+                <span className="toast-icon">??</span>
                 <span className="toast-message">{toast.message}</span>
             </div>
 
             {/* Lock Indicator */}
             {isLocked && (
                 <div className="lock-indicator">
-                    🔒 Qulflangan - cho'qqilarni torting
+                    ?? Qulflangan - cho'qqilarni torting
                 </div>
             )}
 
             {/* Save Button */}
-            <button className="whiteboard-save-btn" title="Saqlash">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                    <polyline points="17 21 17 13 7 13 7 21" />
-                    <polyline points="7 3 7 8 15 8" />
-                </svg>
-            </button>
 
             <button className="whiteboard-close-btn" onClick={onClose} title="Yopish">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 14h6v6" /><path d="M20 10h-6V4" /><path d="M14 10l7-7" /><path d="M3 21l7-7" /></svg>
@@ -503,9 +553,29 @@ function RectangleCanvas({
         const cWidth = canvas.width;
         const cHeight = canvas.height;
 
-        // Clear
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, cWidth, cHeight);
+
+        // Grid
+        if (showGrid) {
+            const gridSize = 25;
+            const offsetX = (cWidth / 2) % gridSize;
+            const offsetY = (cHeight / 2) % gridSize;
+            ctx.strokeStyle = '#1a1a24';
+            ctx.lineWidth = 1;
+            for (let x = offsetX; x < cWidth; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
+            }
+            for (let x = offsetX - gridSize; x >= 0; x -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
+            }
+            for (let y = offsetY; y < cHeight; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cWidth, y); ctx.stroke();
+            }
+            for (let y = offsetY - gridSize; y >= 0; y -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cWidth, y); ctx.stroke();
+            }
+        }
 
         ctx.save();
 
@@ -513,38 +583,6 @@ function RectangleCanvas({
         ctx.translate(cWidth / 2, cHeight / 2);
         ctx.scale(scale, scale);
         ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
-
-        // Grid
-        if (showGrid) {
-            const gridSize = 40;
-            const visibleLeft = -offset.x - cWidth / 2 / scale;
-            const visibleTop = -offset.y - cHeight / 2 / scale;
-            const visibleRight = -offset.x + cWidth / 2 / scale + cWidth;
-            const visibleBottom = -offset.y + cHeight / 2 / scale + cHeight;
-
-            const startX = Math.floor(visibleLeft / gridSize) * gridSize;
-            const startY = Math.floor(visibleTop / gridSize) * gridSize;
-
-            // Minor
-            ctx.strokeStyle = '#1a1a24';
-            ctx.lineWidth = 0.5 / scale;
-            for (let x = startX; x < visibleRight; x += gridSize) {
-                ctx.beginPath(); ctx.moveTo(x, visibleTop); ctx.lineTo(x, visibleBottom); ctx.stroke();
-            }
-            for (let y = startY; y < visibleBottom; y += gridSize) {
-                ctx.beginPath(); ctx.moveTo(visibleLeft, y); ctx.lineTo(visibleRight, y); ctx.stroke();
-            }
-
-            // Major
-            ctx.strokeStyle = '#2a2a38';
-            ctx.lineWidth = 1 / scale;
-            for (let x = startX; x < visibleRight; x += gridSize * 4) {
-                ctx.beginPath(); ctx.moveTo(x, visibleTop); ctx.lineTo(x, visibleBottom); ctx.stroke();
-            }
-            for (let y = startY; y < visibleBottom; y += gridSize * 4) {
-                ctx.beginPath(); ctx.moveTo(visibleLeft, y); ctx.lineTo(visibleRight, y); ctx.stroke();
-            }
-        }
 
         // Calculate Rect geometry
         const maxDim = Math.max(width, height);
@@ -890,11 +928,11 @@ export function TortburchakPage() {
                         ← Orqaga
                     </Link>
                     <Link to="/" className="header-logo-link">
-                        <img src="/src/logo/logo.png" alt="Logo" className="header-logo-img" />
+                        <img src="/logo.png" alt="Logo" className="header-logo-img" />
                     </Link>
                     <div className="header-divider"></div>
                     <div className="pro-page-header-content">
-                        <div className="pro-header-icon"><span className="icon-glow">□</span></div>
+                        <div className="pro-header-icon"><span className="icon-glow">?</span></div>
                         <div className="pro-header-text">
                             <h1>To'rtburchak</h1>
                             <p>Interaktiv modellashtirish</p>
@@ -902,13 +940,7 @@ export function TortburchakPage() {
                     </div>
                 </div>
                 <div className="header-right-section">
-                    {/* User Menu */}
                     <UserMenu />
-
-                    <div className="header-pro-badge">
-                        <span className="pro-crown">👑</span>
-                        <span className="pro-text">PRO</span>
-                    </div>
                 </div>
             </header>
 
@@ -917,7 +949,7 @@ export function TortburchakPage() {
                 <aside className="params-panel pro-params-panel pro-settings-panel">
                     <div className="pro-results-header">
                         <div className="pro-header-content">
-                            <div className="pro-header-icon"><span className="icon-glow">⚙️</span></div>
+                            <div className="pro-header-icon"><span className="icon-glow">??</span></div>
                             <div className="pro-header-text"><h2>Sozlamalar</h2></div>
                         </div>
                     </div>
@@ -926,7 +958,7 @@ export function TortburchakPage() {
                         {/* Unit Section */}
                         <details className="pro-section settings-unit-section" open>
                             <summary className="pro-section-header">
-                                <div className="pro-section-icon">📏</div>
+                                <div className="pro-section-icon">??</div>
                                 <span className="pro-section-title">O'lchov birligi</span>
                                 <span className="pro-section-badge">{UNITS[unit].symbol}</span>
                             </summary>
@@ -945,7 +977,7 @@ export function TortburchakPage() {
                         {/* Dimensions Section */}
                         <details className="pro-section settings-sides-section" open>
                             <summary className="pro-section-header">
-                                <div className="pro-section-icon">📐</div>
+                                <div className="pro-section-icon">??</div>
                                 <span className="pro-section-title">O'lchamlar</span>
                             </summary>
                             <div className="pro-section-content">
@@ -982,31 +1014,31 @@ export function TortburchakPage() {
                         {/* View Section */}
                         <details className="pro-section settings-view-section" open>
                             <summary className="pro-section-header">
-                                <div className="pro-section-icon">👁️</div>
+                                <div className="pro-section-icon">???</div>
                                 <span className="pro-section-title">Ko'rinish</span>
                             </summary>
                             <div className="pro-section-content">
                                 {/* Asosiy */}
                                 <div className="pro-subsection">
-                                    <h4 className="pro-subsection-title">🔷 Asosiy</h4>
+                                    <h4 className="pro-subsection-title">?? Asosiy</h4>
                                     <div className="pro-toggle-grid-settings">
                                         <button className={`pro-toggle-item ${showGrid ? 'active' : ''}`} onClick={() => setShowGrid(!showGrid)}>
-                                            <span className="toggle-icon">⊞</span>
+                                            <span className="toggle-icon">?</span>
                                             <span className="toggle-label">Grid</span>
                                             <span className={`toggle-status ${showGrid ? 'on' : 'off'}`}>{showGrid ? 'ON' : 'OFF'}</span>
                                         </button>
                                         <button className={`pro-toggle-item ${showSides ? 'active' : ''}`} onClick={() => setShowSides(!showSides)}>
-                                            <span className="toggle-icon">🔤</span>
+                                            <span className="toggle-icon">??</span>
                                             <span className="toggle-label">Cho'qqilar</span>
                                             <span className={`toggle-status ${showSides ? 'on' : 'off'}`}>{showSides ? 'ON' : 'OFF'}</span>
                                         </button>
                                         <button className={`pro-toggle-item ${showDimensions ? 'active' : ''}`} onClick={() => setShowDimensions(!showDimensions)}>
-                                            <span className="toggle-icon">📏</span>
+                                            <span className="toggle-icon">??</span>
                                             <span className="toggle-label">O'lchamlar</span>
                                             <span className={`toggle-status ${showDimensions ? 'on' : 'off'}`}>{showDimensions ? 'ON' : 'OFF'}</span>
                                         </button>
                                         <button className={`pro-toggle-item ${showAngles ? 'active' : ''}`} onClick={() => setShowAngles(!showAngles)}>
-                                            <span className="toggle-icon">∠</span>
+                                            <span className="toggle-icon">?</span>
                                             <span className="toggle-label">Burchaklar</span>
                                             <span className={`toggle-status ${showAngles ? 'on' : 'off'}`}>{showAngles ? 'ON' : 'OFF'}</span>
                                         </button>
@@ -1015,30 +1047,30 @@ export function TortburchakPage() {
 
                                 {/* Tez kuda */}
                                 <div className="pro-subsection">
-                                    <h4 className="pro-subsection-title">⚡ Tez kuda</h4>
+                                    <h4 className="pro-subsection-title">? Tez kuda</h4>
                                     <div className="pro-toggle-grid-settings">
                                         <button className={`pro-toggle-item ${showDiagonals ? 'active' : ''}`} onClick={() => setShowDiagonals(!showDiagonals)}>
-                                            <span className="toggle-icon">↗</span>
+                                            <span className="toggle-icon">?</span>
                                             <span className="toggle-label">Diagonallar</span>
                                             <span className={`toggle-status ${showDiagonals ? 'on' : 'off'}`}>{showDiagonals ? 'ON' : 'OFF'}</span>
                                         </button>
                                         <button className={`pro-toggle-item ${showCenter ? 'active' : ''}`} onClick={() => setShowCenter(!showCenter)}>
-                                            <span className="toggle-icon">⊙</span>
+                                            <span className="toggle-icon">?</span>
                                             <span className="toggle-label">Markaz</span>
                                             <span className={`toggle-status ${showCenter ? 'on' : 'off'}`}>{showCenter ? 'ON' : 'OFF'}</span>
                                         </button>
                                         <button className={`pro-toggle-item ${showSymmetry ? 'active' : ''}`} onClick={() => setShowSymmetry(!showSymmetry)}>
-                                            <span className="toggle-icon">⟷</span>
+                                            <span className="toggle-icon">?</span>
                                             <span className="toggle-label">Simmetriya</span>
                                             <span className={`toggle-status ${showSymmetry ? 'on' : 'off'}`}>{showSymmetry ? 'ON' : 'OFF'}</span>
                                         </button>
                                         <button className={`pro-toggle-item ${showIncircle ? 'active' : ''}`} onClick={() => setShowIncircle(!showIncircle)}>
-                                            <span className="toggle-icon">◎</span>
+                                            <span className="toggle-icon">?</span>
                                             <span className="toggle-label">Ichki doira</span>
                                             <span className={`toggle-status ${showIncircle ? 'on' : 'off'}`}>{showIncircle ? 'ON' : 'OFF'}</span>
                                         </button>
                                         <button className={`pro-toggle-item ${showCircumcircle ? 'active' : ''}`} onClick={() => setShowCircumcircle(!showCircumcircle)}>
-                                            <span className="toggle-icon">◯</span>
+                                            <span className="toggle-icon">?</span>
                                             <span className="toggle-label">Tashqi doira</span>
                                             <span className={`toggle-status ${showCircumcircle ? 'on' : 'off'}`}>{showCircumcircle ? 'ON' : 'OFF'}</span>
                                         </button>
@@ -1066,7 +1098,7 @@ export function TortburchakPage() {
                         showCircumcircle={showCircumcircle}
                     />
                     <div className="shape-type-badge">
-                        <span className="badge-icon">□</span>
+                        <span className="badge-icon">?</span>
                         To'g'ri to'rtburchak
                     </div>
                     <button className="fullscreen-toggle-btn" onClick={() => setShowFullscreen(true)} title="To'liq ekran">
@@ -1082,7 +1114,7 @@ export function TortburchakPage() {
                     <div className="pro-results-header">
                         <div className="pro-header-content">
                             <div className="pro-header-icon">
-                                <span className="icon-glow">📊</span>
+                                <span className="icon-glow">??</span>
                             </div>
                             <div className="pro-header-text">
                                 <h2>Natijalar</h2>
@@ -1102,9 +1134,9 @@ export function TortburchakPage() {
                             <div className="pro-card-content">
                                 <span className="pro-card-label">Yuzasi</span>
                                 <span className="pro-card-value">{calculations.area}</span>
-                                <span className="pro-card-unit">{unitSymbol}²</span>
+                                <span className="pro-card-unit">{unitSymbol}?</span>
                             </div>
-                            <div className="pro-card-formula">S = a × b</div>
+                            <div className="pro-card-formula">S = a ? b</div>
                         </div>
 
                         <div className="pro-result-card perimeter-card" onClick={() => setResultModal('perimeter')} style={{ cursor: 'pointer' }}>
@@ -1126,12 +1158,12 @@ export function TortburchakPage() {
                     {/* Collapsible Sections Container */}
                     <div className="pro-sections-container">
 
-                        {/* ═══════════════════════════════════════════ */}
+                        {/* =========================================== */}
                         {/* O'LCHOVLAR BO'LIMI */}
-                        {/* ═══════════════════════════════════════════ */}
+                        {/* =========================================== */}
                         <details className="pro-section measurements-section" open>
                             <summary className="pro-section-header">
-                                <div className="pro-section-icon">📏</div>
+                                <div className="pro-section-icon">??</div>
                                 <span className="pro-section-title">O'lchovlar</span>
                                 <span className="pro-section-badge">5 ta</span>
                                 <svg className="pro-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1142,7 +1174,7 @@ export function TortburchakPage() {
                             <div className="pro-section-content">
                                 {/* Diagonal */}
                                 <div className="pro-subsection">
-                                    <h4 className="pro-subsection-title">↗ Diagonal</h4>
+                                    <h4 className="pro-subsection-title">? Diagonal</h4>
                                     <div className="pro-measurements-grid">
                                         <div className="pro-measure-item" onClick={() => setResultModal('diagonal')} style={{ cursor: 'pointer' }}>
                                             <span className="measure-label">d</span>
@@ -1153,7 +1185,7 @@ export function TortburchakPage() {
 
                                 {/* Yarim perimetr */}
                                 <div className="pro-subsection">
-                                    <h4 className="pro-subsection-title">📐 Yarim perimetr</h4>
+                                    <h4 className="pro-subsection-title">?? Yarim perimetr</h4>
                                     <div className="pro-measurements-grid">
                                         <div className="pro-measure-item">
                                             <span className="measure-label">p</span>
@@ -1164,32 +1196,32 @@ export function TortburchakPage() {
 
                                 {/* Diagonal burchaklari */}
                                 <div className="pro-subsection">
-                                    <h4 className="pro-subsection-title">∠ Diagonal burchaklari</h4>
+                                    <h4 className="pro-subsection-title">? Diagonal burchaklari</h4>
                                     <div className="pro-measurements-grid">
                                         <div className="pro-measure-item">
-                                            <span className="measure-label">α</span>
-                                            <span className="measure-value">{calculations.diagonalAngle}°</span>
+                                            <span className="measure-label">?</span>
+                                            <span className="measure-value">{calculations.diagonalAngle}�</span>
                                         </div>
                                         <div className="pro-measure-item">
-                                            <span className="measure-label">β</span>
-                                            <span className="measure-value">{calculations.diagonalAngle2}°</span>
+                                            <span className="measure-label">?</span>
+                                            <span className="measure-value">{calculations.diagonalAngle2}�</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Aylana radiuslari */}
                                 <div className="pro-subsection">
-                                    <h4 className="pro-subsection-title">⭕ Aylana radiuslari</h4>
+                                    <h4 className="pro-subsection-title">? Aylana radiuslari</h4>
                                     <div className="pro-circles-grid">
                                         <div className="pro-circle-card incircle" onClick={() => setResultModal('incircle')} style={{ cursor: 'pointer' }}>
-                                            <div className="circle-visual">◎</div>
+                                            <div className="circle-visual">?</div>
                                             <div className="circle-info">
                                                 <span className="circle-name">Ichki</span>
-                                                <span className="circle-value">{calculations.isSquare ? calculations.incircleRadius : '—'} {calculations.isSquare ? unitSymbol : ''}</span>
+                                                <span className="circle-value">{calculations.isSquare ? calculations.incircleRadius : '�'} {calculations.isSquare ? unitSymbol : ''}</span>
                                             </div>
                                         </div>
                                         <div className="pro-circle-card circumcircle" onClick={() => setResultModal('circumcircle')} style={{ cursor: 'pointer' }}>
-                                            <div className="circle-visual">◯</div>
+                                            <div className="circle-visual">?</div>
                                             <div className="circle-info">
                                                 <span className="circle-name">Tashqi</span>
                                                 <span className="circle-value">{calculations.circumcircleRadius} {unitSymbol}</span>
@@ -1200,7 +1232,7 @@ export function TortburchakPage() {
 
                                 {/* Tomonlar */}
                                 <div className="pro-subsection">
-                                    <h4 className="pro-subsection-title">📐 Tomonlar</h4>
+                                    <h4 className="pro-subsection-title">?? Tomonlar</h4>
                                     <div className="pro-measurements-grid">
                                         <div className="pro-measure-item">
                                             <span className="measure-label">a</span>
@@ -1215,42 +1247,42 @@ export function TortburchakPage() {
 
                                 {/* Burchaklar */}
                                 <div className="pro-subsection">
-                                    <h4 className="pro-subsection-title">∠ Burchaklar</h4>
+                                    <h4 className="pro-subsection-title">? Burchaklar</h4>
                                     <div className="pro-angle-grid">
                                         <div className="pro-angle-item">
                                             <div className="pro-angle-vertex">A</div>
-                                            <div className="pro-angle-value">90°</div>
+                                            <div className="pro-angle-value">90�</div>
                                             <div className="pro-angle-bar" style={{ width: '50%' }}></div>
                                         </div>
                                         <div className="pro-angle-item">
                                             <div className="pro-angle-vertex">B</div>
-                                            <div className="pro-angle-value">90°</div>
+                                            <div className="pro-angle-value">90�</div>
                                             <div className="pro-angle-bar" style={{ width: '50%' }}></div>
                                         </div>
                                         <div className="pro-angle-item">
                                             <div className="pro-angle-vertex">C</div>
-                                            <div className="pro-angle-value">90°</div>
+                                            <div className="pro-angle-value">90�</div>
                                             <div className="pro-angle-bar" style={{ width: '50%' }}></div>
                                         </div>
                                         <div className="pro-angle-item">
                                             <div className="pro-angle-vertex">D</div>
-                                            <div className="pro-angle-value">90°</div>
+                                            <div className="pro-angle-value">90�</div>
                                             <div className="pro-angle-bar" style={{ width: '50%' }}></div>
                                         </div>
                                     </div>
                                     <div className="pro-sum-info">
-                                        Σ = 360° (barcha burchaklar 90°)
+                                        ? = 360� (barcha burchaklar 90�)
                                     </div>
                                 </div>
                             </div>
                         </details>
 
-                        {/* ═══════════════════════════════════════════ */}
+                        {/* =========================================== */}
                         {/* FORMULALAR BO'LIMI */}
-                        {/* ═══════════════════════════════════════════ */}
+                        {/* =========================================== */}
                         <details className="pro-section formulas-section">
                             <summary className="pro-section-header">
-                                <div className="pro-section-icon">📚</div>
+                                <div className="pro-section-icon">??</div>
                                 <span className="pro-section-title">Formulalar</span>
                                 <span className="pro-section-badge">4 ta</span>
                                 <svg className="pro-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1260,14 +1292,14 @@ export function TortburchakPage() {
 
                             <div className="pro-section-content">
                                 <div className="pro-formula-group">
-                                    <div className="formula-group-title">📐 Yuza</div>
+                                    <div className="formula-group-title">?? Yuza</div>
                                     <div className="pro-formula-list">
-                                        <div className="pro-formula-item highlight"><code>S = a × b</code><span>Asosiy</span></div>
+                                        <div className="pro-formula-item highlight"><code>S = a ? b</code><span>Asosiy</span></div>
                                     </div>
                                 </div>
 
                                 <div className="pro-formula-group">
-                                    <div className="formula-group-title">📏 Perimetr</div>
+                                    <div className="formula-group-title">?? Perimetr</div>
                                     <div className="pro-formula-list">
                                         <div className="pro-formula-item"><code>P = 2(a + b)</code><span>Asosiy</span></div>
                                         <div className="pro-formula-item"><code>P = 2a + 2b</code><span>Ochiq</span></div>
@@ -1275,20 +1307,20 @@ export function TortburchakPage() {
                                 </div>
 
                                 <div className="pro-formula-group">
-                                    <div className="formula-group-title">↗ Diagonal</div>
+                                    <div className="formula-group-title">? Diagonal</div>
                                     <div className="pro-formula-list">
-                                        <div className="pro-formula-item highlight"><code>d = √(a² + b²)</code><span>Pifagor</span></div>
+                                        <div className="pro-formula-item highlight"><code>d = v(a? + b?)</code><span>Pifagor</span></div>
                                     </div>
                                 </div>
                             </div>
                         </details>
 
-                        {/* ═══════════════════════════════════════════ */}
+                        {/* =========================================== */}
                         {/* QOIDALAR BO'LIMI */}
-                        {/* ═══════════════════════════════════════════ */}
+                        {/* =========================================== */}
                         <div className="pro-section rules-section" onClick={() => setShowRulesModal(true)} style={{ cursor: 'pointer' }}>
                             <div className="pro-section-header">
-                                <div className="pro-section-icon">📖</div>
+                                <div className="pro-section-icon">??</div>
                                 <span className="pro-section-title">Qoidalar</span>
                                 <span className="pro-section-badge">8 ta</span>
                                 <svg className="pro-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1349,25 +1381,25 @@ export function TortburchakPage() {
                             onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#2a2a35'; e.currentTarget.style.color = '#fff'; }}
                             onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af'; }}
                         >
-                            ×
+                            ?
                         </button>
 
                         {resultModal === 'area' ? (
                             <div>
                                 <h3 style={{ fontSize: '24px', marginBottom: '20px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <span style={{ fontSize: '28px' }}>📐</span>
+                                    <span style={{ fontSize: '28px' }}>??</span>
                                     Yuzasini hisoblash
                                 </h3>
                                 <div style={{ background: '#13131a', padding: '20px', borderRadius: '12px', fontFamily: 'monospace', fontSize: '18px', lineHeight: '1.6', color: '#e2e8f0' }}>
                                     <div style={{ marginBottom: '15px', borderBottom: '1px solid #2a2a35', paddingBottom: '15px' }}>
                                         <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '5px' }}>Formula:</div>
-                                        <div>S = a × b</div>
+                                        <div>S = a ? b</div>
                                     </div>
                                     <div>
                                         <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '5px' }}>Hisoblash:</div>
-                                        <div>S = {width} × {height}</div>
+                                        <div>S = {width} ? {height}</div>
                                         <div style={{ marginTop: '15px', fontSize: '24px', fontWeight: 'bold', color: '#10b981' }}>
-                                            S = {calculations.area} {unitSymbol}²
+                                            S = {calculations.area} {unitSymbol}?
                                         </div>
                                     </div>
                                 </div>
@@ -1375,7 +1407,7 @@ export function TortburchakPage() {
                         ) : resultModal === 'perimeter' ? (
                             <div>
                                 <h3 style={{ fontSize: '24px', marginBottom: '20px', color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <span style={{ fontSize: '28px' }}>📏</span>
+                                    <span style={{ fontSize: '28px' }}>??</span>
                                     Perimetrni hisoblash
                                 </h3>
                                 <div style={{ background: '#13131a', padding: '20px', borderRadius: '12px', fontFamily: 'monospace', fontSize: '18px', lineHeight: '1.6', color: '#e2e8f0' }}>
@@ -1386,7 +1418,7 @@ export function TortburchakPage() {
                                     <div>
                                         <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '5px' }}>Hisoblash:</div>
                                         <div>P = 2({width} + {height})</div>
-                                        <div>P = 2 × {width + height}</div>
+                                        <div>P = 2 ? {width + height}</div>
                                         <div style={{ marginTop: '15px', fontSize: '24px', fontWeight: 'bold', color: '#8b5cf6' }}>
                                             P = {calculations.perimeter} {unitSymbol}
                                         </div>
@@ -1396,21 +1428,21 @@ export function TortburchakPage() {
                         ) : resultModal === 'diagonal' ? (
                             <div>
                                 <h3 style={{ fontSize: '24px', marginBottom: '20px', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <span style={{ fontSize: '28px' }}>↗</span>
+                                    <span style={{ fontSize: '28px' }}>?</span>
                                     Diagonalni hisoblash
                                 </h3>
                                 <div style={{ background: '#13131a', padding: '20px', borderRadius: '12px', fontFamily: 'monospace', fontSize: '18px', lineHeight: '1.6', color: '#e2e8f0' }}>
                                     <div style={{ marginBottom: '15px', borderBottom: '1px solid #2a2a35', paddingBottom: '15px' }}>
                                         <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '5px' }}>Pifagor teoremasi bo'yicha:</div>
-                                        <div>d = √(a² + b²)</div>
+                                        <div>d = v(a? + b?)</div>
                                     </div>
                                     <div>
                                         <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '5px' }}>Hisoblash:</div>
-                                        <div>d = √({width}² + {height}²)</div>
-                                        <div>d = √({(width * width).toFixed(2)} + {(height * height).toFixed(2)})</div>
-                                        <div>d = √{(width * width + height * height).toFixed(2)}</div>
+                                        <div>d = v({width}? + {height}?)</div>
+                                        <div>d = v({(width * width).toFixed(2)} + {(height * height).toFixed(2)})</div>
+                                        <div>d = v{(width * width + height * height).toFixed(2)}</div>
                                         <div style={{ marginTop: '15px', fontSize: '24px', fontWeight: 'bold', color: '#f59e0b' }}>
-                                            d ≈ {calculations.diagonal} {unitSymbol}
+                                            d ? {calculations.diagonal} {unitSymbol}
                                         </div>
                                     </div>
                                 </div>
@@ -1418,7 +1450,7 @@ export function TortburchakPage() {
                         ) : resultModal === 'incircle' ? (
                             <div>
                                 <h3 style={{ fontSize: '24px', marginBottom: '20px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <span style={{ fontSize: '28px' }}>◎</span>
+                                    <span style={{ fontSize: '28px' }}>?</span>
                                     Ichki doira radiusi
                                 </h3>
                                 <div style={{ background: '#13131a', padding: '20px', borderRadius: '12px', fontFamily: 'monospace', fontSize: '18px', lineHeight: '1.6', color: '#e2e8f0' }}>
@@ -1439,13 +1471,13 @@ export function TortburchakPage() {
                                     ) : (
                                         <>
                                             <div style={{ color: '#f59e0b', padding: '15px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
-                                                <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>⚠️ Eslatma</div>
+                                                <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>?? Eslatma</div>
                                                 <div style={{ fontSize: '14px' }}>To'g'ri to'rtburchakda faqat tashqi chizilgan doira mavjud. Ichki chizilgan doira faqat kvadratda (a = b bo'lganda) mavjud.</div>
                                             </div>
                                             <div style={{ marginTop: '15px' }}>
                                                 <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '5px' }}>Kichik tomon asosida radiusi:</div>
                                                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10b981' }}>
-                                                    r ≈ {(Math.min(width, height) / 2).toFixed(2)} {unitSymbol}
+                                                    r ? {(Math.min(width, height) / 2).toFixed(2)} {unitSymbol}
                                                 </div>
                                             </div>
                                         </>
@@ -1455,21 +1487,21 @@ export function TortburchakPage() {
                         ) : resultModal === 'circumcircle' ? (
                             <div>
                                 <h3 style={{ fontSize: '24px', marginBottom: '20px', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <span style={{ fontSize: '28px' }}>◯</span>
+                                    <span style={{ fontSize: '28px' }}>?</span>
                                     Tashqi doira radiusi
                                 </h3>
                                 <div style={{ background: '#13131a', padding: '20px', borderRadius: '12px', fontFamily: 'monospace', fontSize: '18px', lineHeight: '1.6', color: '#e2e8f0' }}>
                                     <div style={{ marginBottom: '15px', borderBottom: '1px solid #2a2a35', paddingBottom: '15px' }}>
                                         <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '5px' }}>Formula:</div>
-                                        <div>R = d / 2 = √(a² + b²) / 2</div>
+                                        <div>R = d / 2 = v(a? + b?) / 2</div>
                                     </div>
                                     <div>
                                         <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '5px' }}>Hisoblash:</div>
-                                        <div>R = √({width}² + {height}²) / 2</div>
-                                        <div>R = √({(width * width).toFixed(2)} + {(height * height).toFixed(2)}) / 2</div>
+                                        <div>R = v({width}? + {height}?) / 2</div>
+                                        <div>R = v({(width * width).toFixed(2)} + {(height * height).toFixed(2)}) / 2</div>
                                         <div>R = {calculations.diagonal} / 2</div>
                                         <div style={{ marginTop: '15px', fontSize: '24px', fontWeight: 'bold', color: '#3b82f6' }}>
-                                            R ≈ {calculations.circumcircleRadius} {unitSymbol}
+                                            R ? {calculations.circumcircleRadius} {unitSymbol}
                                         </div>
                                     </div>
                                 </div>
@@ -1529,22 +1561,22 @@ export function TortburchakPage() {
                             onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#2a2a35'; e.currentTarget.style.color = '#fff'; }}
                             onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af'; }}
                         >
-                            ×
+                            ?
                         </button>
 
                         <h3 style={{ fontSize: '28px', marginBottom: '25px', color: '#6366f1', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <span style={{ fontSize: '32px' }}>📖</span>
+                            <span style={{ fontSize: '32px' }}>??</span>
                             To'rtburchak qoidalari
                         </h3>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                             {[
-                                { num: 1, title: 'Barcha burchaklar 90°', desc: 'To\'g\'ri to\'rtburchakning barcha ichki burchaklari to\'g\'ri burchak (90°) ga teng', color: '#10b981' },
+                                { num: 1, title: 'Barcha burchaklar 90�', desc: 'To\'g\'ri to\'rtburchakning barcha ichki burchaklari to\'g\'ri burchak (90�) ga teng', color: '#10b981' },
                                 { num: 2, title: 'Qarama-qarshi tomonlar teng', desc: 'Qarama-qarshi tomonlar o\'zaro teng va parallel: AB = CD, AD = BC', color: '#f59e0b' },
                                 { num: 3, title: 'Diagonallar teng', desc: 'Diagonallarning uzunliklari teng: AC = BD', color: '#06b6d4' },
                                 { num: 4, title: 'Diagonallar yarimlatadi', desc: 'Diagonallar bir-birini yarimlatadi (ikki teng qismga bo\'ladi)', color: '#8b5cf6' },
-                                { num: 5, title: 'Pifagor teoremasi', desc: 'Diagonal uzunligi: d = √(a² + b²), bu yerda a va b tomonlar', color: '#ef4444' },
-                                { num: 6, title: 'Yuza formulasi', desc: 'Yuza = a × b (eni ko\'paytir bo\'yi)', color: '#ec4899' },
+                                { num: 5, title: 'Pifagor teoremasi', desc: 'Diagonal uzunligi: d = v(a? + b?), bu yerda a va b tomonlar', color: '#ef4444' },
+                                { num: 6, title: 'Yuza formulasi', desc: 'Yuza = a ? b (eni ko\'paytir bo\'yi)', color: '#ec4899' },
                                 { num: 7, title: 'Perimetr formulasi', desc: 'Perimetr = 2(a + b) yoki 2a + 2b', color: '#3b82f6' },
                                 { num: 8, title: 'Simmetriya o\'qlari', desc: 'To\'rtburchakda 2 ta simmetriya o\'qi mavjud (gorizontal va vertikal)', color: '#6366f1' }
                             ].map(rule => (
@@ -1599,3 +1631,4 @@ export function TortburchakPage() {
         </div>
     );
 }
+

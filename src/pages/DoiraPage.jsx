@@ -6,8 +6,7 @@ import { UserMenu } from '../components/UserMenu';
 const UNITS = {
     mm: { name: 'Millimetr', symbol: 'mm', factor: 0.001 },
     sm: { name: 'Santimetr', symbol: 'sm', factor: 0.01 },
-    m: { name: 'Metr', symbol: 'm', factor: 1 },
-    km: { name: 'Kilometr', symbol: 'km', factor: 1000 }
+    m: { name: 'Metr', symbol: 'm', factor: 1 }
 };
 
 const COLORS = {
@@ -55,33 +54,34 @@ function CircleCanvas({
         const cWidth = canvas.width;
         const cHeight = canvas.height;
 
-        // Clear
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, cWidth, cHeight);
+
+        // Grid
+        if (showGrid) {
+            const gridSize = 25;
+            const offsetX = (cWidth / 2) % gridSize;
+            const offsetY = (cHeight / 2) % gridSize;
+            ctx.strokeStyle = '#1a1a24';
+            ctx.lineWidth = 1;
+            for (let x = offsetX; x < cWidth; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
+            }
+            for (let x = offsetX - gridSize; x >= 0; x -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
+            }
+            for (let y = offsetY; y < cHeight; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cWidth, y); ctx.stroke();
+            }
+            for (let y = offsetY - gridSize; y >= 0; y -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cWidth, y); ctx.stroke();
+            }
+        }
 
         ctx.save();
         ctx.translate(cWidth / 2, cHeight / 2);
         ctx.scale(scale, scale);
         ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
-
-        // Grid
-        if (showGrid) {
-            const gridSize = 30;
-            ctx.strokeStyle = '#1a1a24';
-            ctx.lineWidth = 0.5;
-            for (let x = 0; x < cWidth; x += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, cHeight);
-                ctx.stroke();
-            }
-            for (let y = 0; y < cHeight; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(cWidth, y);
-                ctx.stroke();
-            }
-        }
 
         // Calculate circle position
         const centerX = cWidth / 2;
@@ -448,7 +448,7 @@ function FullscreenCircleWhiteboard({ radius, unitSymbol, onClose, onSizeChange 
 
         drawings.forEach(d => {
             if (d.points.length < 2) return;
-            if (d.isEraser) { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = (d.size || 20) / scale; }
+            if (d.isEraser) { ctx.globalCompositeOperation = 'destination-out'; ctx.strokeStyle = 'rgba(0,0,0,1)'; ctx.lineWidth = (d.size || 20) / scale; }
             else { ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = d.color; ctx.lineWidth = d.size / scale; }
             ctx.lineCap = 'round'; ctx.lineJoin = 'round';
             ctx.beginPath(); ctx.moveTo(d.points[0].x, d.points[0].y);
@@ -457,7 +457,7 @@ function FullscreenCircleWhiteboard({ radius, unitSymbol, onClose, onSizeChange 
         });
 
         if (currentPath.length > 1) {
-            if (activeTool === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = eraserSize / scale; }
+            if (activeTool === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.strokeStyle = 'rgba(0,0,0,1)'; ctx.lineWidth = eraserSize / scale; }
             else { ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = penColor; ctx.lineWidth = penSize / scale; }
             ctx.lineCap = 'round'; ctx.lineJoin = 'round';
             ctx.beginPath(); ctx.moveTo(currentPath[0].x, currentPath[0].y);
@@ -873,7 +873,7 @@ export function DoiraPage() {
                         ← Orqaga
                     </Link>
                     <Link to="/" className="header-logo-link" title="Bosh sahifa">
-                        <img src="/src/logo/logo.png" alt="Logo" className="header-logo-img" />
+                        <img src="/logo.png" alt="Logo" className="header-logo-img" />
                     </Link>
                     <div className="header-divider"></div>
                     <div className="pro-page-header-content">
@@ -890,10 +890,6 @@ export function DoiraPage() {
                 {/* Right Section - Actions */}
                 <div className="header-right-section">
                     <UserMenu />
-                    <div className="header-pro-badge">
-                        <span className="pro-crown">👑</span>
-                        <span className="pro-text">PRO</span>
-                    </div>
                 </div>
             </header>
 
@@ -1037,7 +1033,6 @@ export function DoiraPage() {
                     </div>
                 </aside>
 
-                {/* Canvas Panel */}
                 <section className="canvas-panel" style={{ position: 'relative' }}>
                     <CircleCanvas
                         radius={radius}

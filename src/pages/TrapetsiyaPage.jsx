@@ -6,8 +6,7 @@ import { UserMenu } from '../components/UserMenu';
 const UNITS = {
     mm: { name: 'Millimetr', symbol: 'mm', factor: 0.001 },
     sm: { name: 'Santimetr', symbol: 'sm', factor: 0.01 },
-    m: { name: 'Metr', symbol: 'm', factor: 1 },
-    km: { name: 'Kilometr', symbol: 'km', factor: 1000 }
+    m: { name: 'Metr', symbol: 'm', factor: 1 }
 };
 
 // Trapetsiya turlari
@@ -32,6 +31,7 @@ const COLOR_PALETTE = [
 // Fullscreen Trapezoid komponenti
 function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid, onClose, onSizeChange }) {
     const canvasRef = useRef(null);
+    const drawingCanvasRef = useRef(null);
     const containerRef = useRef(null);
 
     const [scale, setScale] = useState(1);
@@ -51,6 +51,7 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
     const [eraserSize, setEraserSize] = useState(20);
     const [draggingVertex, setDraggingVertex] = useState(null);
     const [toast, setToast] = useState({ show: false, message: '' });
+    const [trapezoidFillColor, setTrapezoidFillColor] = useState('gradient');
 
     useEffect(() => {
         const updateSize = () => {
@@ -123,18 +124,22 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
             ctx.shadowColor = 'rgba(239, 68, 68, 0.5)';
             ctx.shadowBlur = 40 / scale;
 
-            const gradient = ctx.createLinearGradient(points[0].x, points[0].y, points[2].x, points[2].y);
-            gradient.addColorStop(0, 'rgba(239, 68, 68, 0.35)');
-            gradient.addColorStop(0.5, 'rgba(249, 115, 22, 0.3)');
-            gradient.addColorStop(1, 'rgba(239, 68, 68, 0.35)');
-
             ctx.beginPath();
             ctx.moveTo(points[0].x, points[0].y);
             ctx.lineTo(points[1].x, points[1].y);
             ctx.lineTo(points[2].x, points[2].y);
             ctx.lineTo(points[3].x, points[3].y);
             ctx.closePath();
-            ctx.fillStyle = gradient;
+
+            if (trapezoidFillColor === 'gradient') {
+                const gradient = ctx.createLinearGradient(points[0].x, points[0].y, points[2].x, points[2].y);
+                gradient.addColorStop(0, 'rgba(239, 68, 68, 0.35)');
+                gradient.addColorStop(0.5, 'rgba(249, 115, 22, 0.3)');
+                gradient.addColorStop(1, 'rgba(239, 68, 68, 0.35)');
+                ctx.fillStyle = gradient;
+            } else {
+                ctx.fillStyle = trapezoidFillColor + '80';
+            }
             ctx.fill();
 
             ctx.shadowColor = 'transparent';
@@ -217,15 +222,28 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
             });
         }
         ctx.restore();
+    }, [scale, offset, topBase, bottomBase, height, isValid, canvasSize, trapezoidData, unitSymbol, trapezoidFillColor]);
+
+    // Drawing canvas
+    useEffect(() => {
+        const canvas = drawingCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const cWidth = canvas.width;
+        const cHeight = canvas.height;
+
+        ctx.clearRect(0, 0, cWidth, cHeight);
 
         // Draw paths
         drawings.forEach(d => {
             if (d.points.length < 2) return;
             ctx.save();
-            ctx.translate(width / 2, cHeight / 2);
+            ctx.translate(cWidth / 2, cHeight / 2);
             ctx.scale(scale, scale);
-            ctx.translate(-width / 2 + offset.x, -cHeight / 2 + offset.y);
-            ctx.strokeStyle = d.color;
+            ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
+            
+            ctx.globalCompositeOperation = d.isEraser ? 'destination-out' : 'source-over';
+            ctx.strokeStyle = d.isEraser ? 'rgba(0,0,0,1)' : d.color;
             ctx.lineWidth = d.size / scale;
             ctx.lineCap = 'round';
             ctx.beginPath();
@@ -237,11 +255,13 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
 
         if (currentPath.length > 1) {
             ctx.save();
-            ctx.translate(width / 2, cHeight / 2);
+            ctx.translate(cWidth / 2, cHeight / 2);
             ctx.scale(scale, scale);
-            ctx.translate(-width / 2 + offset.x, -cHeight / 2 + offset.y);
-            ctx.strokeStyle = penColor;
-            ctx.lineWidth = penSize / scale;
+            ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
+            
+            ctx.globalCompositeOperation = activeTool === 'eraser' ? 'destination-out' : 'source-over';
+            ctx.strokeStyle = activeTool === 'eraser' ? 'rgba(0,0,0,1)' : penColor;
+            ctx.lineWidth = (activeTool === 'eraser' ? eraserSize : penSize) / scale;
             ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(currentPath[0].x, currentPath[0].y);
@@ -249,7 +269,7 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
             ctx.stroke();
             ctx.restore();
         }
-    }, [scale, offset, topBase, bottomBase, height, isValid, canvasSize, trapezoidData, drawings, currentPath, penColor, penSize, unitSymbol]);
+    }, [drawings, currentPath, scale, offset, penColor, penSize, eraserSize, activeTool, canvasSize]);
 
     const getCanvasCoords = (e) => {
         const canvas = canvasRef.current;
@@ -351,7 +371,12 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
 
     const handleMouseUp = () => {
         if (isDrawing && currentPath.length > 1) {
-            setDrawings(prev => [...prev, { points: currentPath, color: penColor, size: penSize }]);
+            setDrawings(prev => [...prev, { 
+                points: currentPath, 
+                color: penColor, 
+                size: activeTool === 'eraser' ? eraserSize : penSize,
+                isEraser: activeTool === 'eraser'
+            }]);
         }
         setIsDrawing(false);
         setDraggingVertex(null);
@@ -403,7 +428,27 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleMouseUp}
                 onWheel={handleWheel}
-                style={{ cursor: activeTool === 'pen' ? 'crosshair' : (isDragging ? 'grabbing' : 'grab'), touchAction: 'none' }}
+                style={{ cursor: activeTool === 'pen' || activeTool === 'eraser' ? (activeTool === 'eraser' ? 'cell' : 'crosshair') : (isDragging ? 'grabbing' : 'grab'), touchAction: 'none' }}
+            />
+            <canvas
+                ref={drawingCanvasRef}
+                width={canvasSize.width}
+                height={canvasSize.height}
+                className="whiteboard-drawing-canvas"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleMouseUp}
+                onWheel={handleWheel}
+                style={{ 
+                    position: 'absolute', top: 0, left: 0, zIndex: 10,
+                    pointerEvents: (activeTool === 'pen' || activeTool === 'eraser') ? 'auto' : 'none',
+                    cursor: activeTool === 'eraser' ? 'cell' : 'crosshair',
+                    touchAction: 'none'
+                }}
             />
 
             <button className={`toolbar-toggle-btn ${isToolbarOpen ? 'open' : ''}`} onClick={() => setIsToolbarOpen(!isToolbarOpen)}>
@@ -459,6 +504,18 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
                     <span className="size-value">{activeTool === 'eraser' ? eraserSize : penSize}px</span>
                 </div>
                 <div className="toolbar-divider" />
+                <div className="toolbar-section fill-section">
+                    <span className="fill-label">Trapetsiya:</span>
+                    <div className="fill-buttons">
+                        <button className={`fill-btn ${trapezoidFillColor === 'gradient' ? 'active' : ''}`} onClick={() => setTrapezoidFillColor('gradient')} title="Gradient">
+                            <span className="gradient-preview"></span>
+                        </button>
+                        {COLOR_PALETTE.slice(0, 5).map(color => (
+                            <button key={`fill-${color}`} className={`fill-btn ${trapezoidFillColor === color ? 'active' : ''}`} style={{ backgroundColor: color }} onClick={() => setTrapezoidFillColor(color)} title={`Bo'yash: ${color}`} />
+                        ))}
+                    </div>
+                </div>
+                <div className="toolbar-divider" />
                 <div className="whiteboard-actions">
                     <button className="whiteboard-action-btn clear-btn" onClick={() => setDrawings([])} title="Tozalash">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
@@ -480,13 +537,6 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
             )}
 
             {/* Save Button */}
-            <button className="whiteboard-save-btn" title="Saqlash">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                    <polyline points="17 21 17 13 7 13 7 21" />
-                    <polyline points="7 3 7 8 15 8" />
-                </svg>
-            </button>
 
             <button className="whiteboard-close-btn" onClick={onClose} title="Yopish">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 14h6v6" /><path d="M20 10h-6V4" /><path d="M14 10l7-7" /><path d="M3 21l7-7" /></svg>
@@ -498,46 +548,49 @@ function FullscreenTrapezoid({ topBase, bottomBase, height, unitSymbol, isValid,
 // Trapetsiya Canvas komponenti
 function TrapezoidCanvas({ topBase, bottomBase, height, leftLeg, rightLeg, showGrid, showHeight, showDiagonals, showMiddleLine, showAngles, isValid }) {
     const canvasRef = useRef(null);
+    const [canvasSize, setCanvasSize] = useState({ width: 700, height: 550 });
+
+    useEffect(() => {
+        const updateSize = () => {
+            if (canvasRef.current && canvasRef.current.parentElement) {
+                const parent = canvasRef.current.parentElement;
+                setCanvasSize({ width: parent.clientWidth, height: parent.clientHeight });
+            }
+        };
+        updateSize();
+        window.addEventListener('resize', updateSize);
+        return () => window.removeEventListener('resize', updateSize);
+    }, []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
         const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const cHeight = canvas.height;
+        const width = canvasSize.width;
+        const cHeight = canvasSize.height;
 
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, width, cHeight);
 
+        // Grid
         if (showGrid) {
+            const gridSize = 25;
+            const offsetX = (width / 2) % gridSize;
+            const offsetY = (cHeight / 2) % gridSize;
             ctx.strokeStyle = '#1a1a24';
             ctx.lineWidth = 1;
-            const gridSize = 25;
-            for (let x = 0; x < width; x += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, cHeight);
-                ctx.stroke();
+            for (let x = offsetX; x < width; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
             }
-            for (let y = 0; y < cHeight; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
+            for (let x = offsetX - gridSize; x >= 0; x -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cHeight); ctx.stroke();
             }
-            ctx.strokeStyle = '#2a2a38';
-            for (let x = 0; x < width; x += gridSize * 4) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, cHeight);
-                ctx.stroke();
+            for (let y = offsetY; y < cHeight; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
             }
-            for (let y = 0; y < cHeight; y += gridSize * 4) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
+            for (let y = offsetY - gridSize; y >= 0; y -= gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
             }
         }
 
@@ -699,9 +752,9 @@ function TrapezoidCanvas({ topBase, bottomBase, height, leftLeg, rightLeg, showG
             ctx.fillText(labels[i], lx, ly);
         });
 
-    }, [topBase, bottomBase, height, leftLeg, rightLeg, showGrid, showHeight, showDiagonals, showMiddleLine, showAngles, isValid]);
+    }, [topBase, bottomBase, height, leftLeg, rightLeg, showGrid, showHeight, showDiagonals, showMiddleLine, showAngles, isValid, canvasSize]);
 
-    return <canvas ref={canvasRef} width={700} height={550} className="triangle-canvas" />;
+    return <canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} className="triangle-canvas" style={{ display: 'block', width: '100%', height: '100%' }} />;
 }
 
 export function TrapetsiyaPage() {
@@ -844,7 +897,7 @@ export function TrapetsiyaPage() {
                         ← Orqaga
                     </Link>
                     <Link to="/" className="header-logo-link" title="Bosh sahifa">
-                        <img src="/src/logo/logo.png" alt="Logo" className="header-logo-img" />
+                        <img src="/logo.png" alt="Logo" className="header-logo-img" />
                     </Link>
                     <div className="header-divider"></div>
                     <div className="pro-page-header-content">
@@ -859,10 +912,6 @@ export function TrapetsiyaPage() {
                 </div>
                 <div className="header-right-section">
                     <UserMenu />
-                    <div className="header-pro-badge">
-                        <span className="pro-crown">👑</span>
-                        <span className="pro-text">PRO</span>
-                    </div>
                 </div>
             </header>
 
@@ -1291,3 +1340,4 @@ export function TrapetsiyaPage() {
         </div>
     );
 }
+

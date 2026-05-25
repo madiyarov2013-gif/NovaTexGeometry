@@ -6,8 +6,7 @@ import { UserMenu } from '../components/UserMenu';
 const UNITS = {
     mm: { name: 'Millimetr', symbol: 'mm', factor: 0.001 },
     sm: { name: 'Santimetr', symbol: 'sm', factor: 0.01 },
-    m: { name: 'Metr', symbol: 'm', factor: 1 },
-    km: { name: 'Kilometr', symbol: 'km', factor: 1000 }
+    m: { name: 'Metr', symbol: 'm', factor: 1 }
 };
 
 const COLORS = {
@@ -550,7 +549,7 @@ function FullscreenSquareWhiteboard({ side, unitSymbol, onClose, onSizeChange })
 
         drawings.forEach(d => {
             if (d.points.length < 2) return;
-            if (d.isEraser) { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = (d.size || 20) / scale; }
+            if (d.isEraser) { ctx.globalCompositeOperation = 'destination-out'; ctx.strokeStyle = 'rgba(0,0,0,1)'; ctx.lineWidth = (d.size || 20) / scale; }
             else { ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = d.color; ctx.lineWidth = d.size / scale; }
             ctx.lineCap = 'round'; ctx.lineJoin = 'round';
             ctx.beginPath(); ctx.moveTo(d.points[0].x, d.points[0].y);
@@ -559,7 +558,7 @@ function FullscreenSquareWhiteboard({ side, unitSymbol, onClose, onSizeChange })
         });
 
         if (currentPath.length > 1) {
-            if (activeTool === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = eraserSize / scale; }
+            if (activeTool === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.strokeStyle = 'rgba(0,0,0,1)'; ctx.lineWidth = eraserSize / scale; }
             else { ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = penColor; ctx.lineWidth = penSize / scale; }
             ctx.lineCap = 'round'; ctx.lineJoin = 'round';
             ctx.beginPath(); ctx.moveTo(currentPath[0].x, currentPath[0].y);
@@ -885,7 +884,7 @@ export function KvadratPage() {
                         ← Orqaga
                     </Link>
                     <Link to="/" className="header-logo-link">
-                        <img src="/src/logo/logo.png" alt="Logo" className="header-logo-img" />
+                        <img src="/logo.png" alt="Logo" className="header-logo-img" />
                     </Link>
                     <div className="header-divider"></div>
                     <div className="pro-page-header-content">
@@ -898,10 +897,6 @@ export function KvadratPage() {
                 </div>
                 <div className="header-right-section">
                     <UserMenu />
-                    <div className="header-pro-badge">
-                        <span className="pro-crown">👑</span>
-                        <span className="pro-text">PRO</span>
-                    </div>
                 </div>
             </header>
 

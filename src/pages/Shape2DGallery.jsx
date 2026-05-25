@@ -165,7 +165,7 @@ export function Shape2DGallery() {
                     <div className="info-card">
                         <div className="info-icon">🔢</div>
                         <h4>O'lchovlar</h4>
-                        <p>mm, sm, m, km - istalgan birlik</p>
+                        <p>mm, sm, m - istalgan birlik</p>
                     </div>
                 </div>
             </section>

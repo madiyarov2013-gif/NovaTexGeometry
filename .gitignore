@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude / AI workspace
+.claude/
+
+# Temporary / fix / backup files
+temp_*
+*.backup
+fix_*.cjs
+fix_*.js
+fix_*.ps1
+fix_*.py

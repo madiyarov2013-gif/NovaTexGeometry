@@ -5,6 +5,7 @@ import { PerformanceProvider } from './context/PerformanceContext';
 import { Dashboard } from './pages/Dashboard';
 import { ShapeGallery } from './pages/ShapeGallery';
 import { Shape2DGallery } from './pages/Shape2DGallery';
+import { ShapeBuilderPage } from './pages/ShapeBuilderPage';
 import { PrizmaPage } from './pages/PrizmaPage';
 import { PiramidaPage } from './pages/PiramidaPage';
 import { SilindrPage } from './pages/SilindrPage';
@@ -82,12 +83,13 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<Dashboard />} />
+            <Route path="/create-shape" element={<ShapeBuilderPage />} />
             <Route path="/3d-models" element={<ShapeGallery />} />
             <Route path="/3d-models/prizma" element={<PrizmaPage />} />
             <Route path="/3d-models/piramida" element={<PiramidaPage />} />
             <Route path="/3d-models/silindr" element={<SilindrPage />} />
             <Route path="/3d-models/konus" element={<KonusPage />} />
-            <Route path="/3d-models/shar" element={<SharPage />} />
+            <Route path="/3d-models/shar" element={<SharPage />} /> 
             <Route path="/3d-models/konus-kesma" element={<KesikKonusPage />} />
             <Route path="/2d-models" element={<Shape2DGallery />} />
             <Route path="/2d-models/uchburchak" element={<UchburchakPage />} />
@@ -99,6 +101,7 @@ function App() {
             <Route path="/2d-models/romb" element={<RombPage />} />
             <Route path="/2d-models/muntazam-koburchak" element={<MuntazamKoburchakPage />} />
           </Routes>
+
         </BrowserRouter>
       </AuthProvider>
     </PerformanceProvider>
