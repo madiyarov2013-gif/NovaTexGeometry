@@ -13,6 +13,9 @@ export default defineConfig({
       polyfills: true
     })
   ],
+  server: {
+    port: Number(process.env.PORT) || 5173
+  },
   build: {
     target: 'es2015',
     cssTarget: 'chrome61'

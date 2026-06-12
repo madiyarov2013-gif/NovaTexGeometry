@@ -38,11 +38,1210 @@ const COLOR_PALETTE = [
     '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280', '#000000'
 ];
 
+// ===== Umumiy chizish funksiyasi: uchburchak ko'rinish elementlari =====
+// Ikkala canvasda (asosiy va fullscreen) ishlatiladi. anim — har bir element uchun 0..1 animatsiya progressi.
+function drawTriangleFeatures(ctx, points, { a, b, c, angleA, angleB, angleC, anim, unitSuffix = '', seedRects = [] }) {
+        // Animatsiya yordamchilari
+        const clamp01 = (v) => Math.max(0, Math.min(1, v));
+        // 3 ta elementni birin-ketin (stagger) chiqarish uchun
+        const stagger = (p, i) => clamp01((p - i * 0.18) / 0.64);
+
+        // ===== Yozuvlar to'qnashuvini oldini olish tizimi =====
+        // Joylashtirilgan yozuvlarning to'rtburchaklarini saqlaymiz; yangi yozuv
+        // mavjudlari bilan kesishsa, uni tashqi yo'nalishda suramiz (overlapsiz qilamiz).
+        const placedRects = seedRects.map(r => ({ ...r }));
+        const _overlap = (A, B) => !(A.x + A.w <= B.x || B.x + B.w <= A.x || A.y + A.h <= B.y || B.y + B.h <= A.y);
+        // cx,cy — yozuv markazi; w,h — o'lcham; dx,dy — siljitishning afzal yo'nalishi.
+        // To'qnashuvsiz eng yaqin markazni qaytaradi va bandlangan to'rtburchakni ro'yxatga oladi.
+        const _fits = (nx, ny, w, h) => {
+            const pad = 2;
+            const r = { x: nx - w / 2 - pad, y: ny - h / 2 - pad, w: w + pad * 2, h: h + pad * 2 };
+            return placedRects.some(p => _overlap(r, p)) ? null : r;
+        };
+        const placeLabel = (cx, cy, w, h, dx = 0, dy = 0) => {
+            // 1) Avval afzal joyni sinaymiz
+            let r = _fits(cx, cy, w, h);
+            if (r) { placedRects.push(r); return { x: cx, y: cy }; }
+            // 2) Spiral: afzal yo'nalishdan boshlab, asta aylanib eng yaqin bo'sh joyni topamiz
+            const len = Math.hypot(dx, dy);
+            const baseAng = len > 0.001 ? Math.atan2(dy, dx) : -Math.PI / 2; // standart: yuqoriga
+            const angOffsets = [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2.0, -2.0, 2.6, -2.6, Math.PI];
+            for (let dist = 7; dist <= 110; dist += 7) {
+                for (const da of angOffsets) {
+                    const ang = baseAng + da;
+                    const nx = cx + Math.cos(ang) * dist;
+                    const ny = cy + Math.sin(ang) * dist;
+                    r = _fits(nx, ny, w, h);
+                    if (r) { placedRects.push(r); return { x: nx, y: ny }; }
+                }
+            }
+            // 3) Bo'sh joy topilmadi — afzal joyga qo'yamiz
+            const pad = 2;
+            const fallback = { x: cx - w / 2 - pad, y: cy - h / 2 - pad, w: w + pad * 2, h: h + pad * 2 };
+            placedRects.push(fallback);
+            return { x: cx, y: cy };
+        };
+
+        // Balandlik (agar ko'rsatish kerak bo'lsa)
+        if (anim.height > 0.001) {
+            // Animatsiya: chiziq C cho'qqisidan asos tomon o'sib chiqadi
+            const hProg = anim.height;
+            const hLineProg = clamp01(hProg / 0.7);
+
+            // C nuqtadan AB ga balandlik
+            const t = ((points[2].x - points[0].x) * (points[1].x - points[0].x) +
+                (points[2].y - points[0].y) * (points[1].y - points[0].y)) /
+                ((points[1].x - points[0].x) ** 2 + (points[1].y - points[0].y) ** 2);
+
+            const hx = points[0].x + t * (points[1].x - points[0].x);
+            const hy = points[0].y + t * (points[1].y - points[0].y);
+
+            // Balandlik chizig'i (dashed)
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = COLORS.accent;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(points[2].x, points[2].y);
+            ctx.lineTo(points[2].x + (hx - points[2].x) * hLineProg, points[2].y + (hy - points[2].y) * hLineProg);
+            ctx.stroke();
+
+            // Agar balandlik uchburchak tashqarisiga tushsa, asosni uzaytirib chizamiz
+            // (chiziq to'liq chizilgandan keyin)
+            if (t < 0 && hProg > 0.7) {
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                ctx.lineTo(hx, hy);
+                ctx.stroke();
+            } else if (t > 1 && hProg > 0.7) {
+                ctx.beginPath();
+                ctx.moveTo(points[1].x, points[1].y);
+                ctx.lineTo(hx, hy);
+                ctx.stroke();
+            }
+
+            ctx.setLineDash([]);
+
+            // Balandlik uzunligini hisoblash
+            const heightLength = Math.sqrt((points[2].x - hx) ** 2 + (points[2].y - hy) ** 2);
+
+            // Faqat balandlik 0 dan katta bo'lganda chizish
+            if (heightLength > 1) {
+                // Yozuv va 90° belgisi chiziq chizilib bo'lgach paydo bo'ladi
+                ctx.save();
+                ctx.globalAlpha = clamp01((hProg - 0.6) / 0.4);
+                // Uchburchak markazini hisoblash
+                const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
+                const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
+
+                // h label joylashuvi - balandlik chizig'ining o'rtasida, uchburchak tashqarisida
+                const midHX = (points[2].x + hx) / 2;
+                const midHY = (points[2].y + hy) / 2;
+
+                // Balandlik chizig'iga perpendikulyar yo'nalish
+                const hdx = hx - points[2].x;
+                const hdy = hy - points[2].y;
+                const hLen = Math.sqrt(hdx * hdx + hdy * hdy);
+                let offsetX = -hdy / hLen * 20;
+                let offsetY = hdx / hLen * 20;
+
+                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
+                const testX = midHX + offsetX;
+                const testY = midHY + offsetY;
+                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
+                const distFromMid = Math.sqrt((midHX - centroidX) ** 2 + (midHY - centroidY) ** 2);
+
+                if (distToCentroid < distFromMid) {
+                    offsetX = -offsetX;
+                    offsetY = -offsetY;
+                }
+
+                // h label foni (to'qnashuvsiz joylashtirish)
+                ctx.font = 'bold 14px Inter, sans-serif';
+                const hPos = placeLabel(midHX + offsetX, midHY + offsetY, 24, 24, offsetX, offsetY);
+                const labelX = hPos.x, labelY = hPos.y;
+                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+                ctx.beginPath();
+                ctx.roundRect(labelX - 12, labelY - 12, 24, 24, 6);
+                ctx.fill();
+                ctx.strokeStyle = COLORS.accent;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // h label matni
+                ctx.fillStyle = COLORS.accent;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('h', labelX, labelY);
+
+                // To'g'ri burchak belgisi (90° kvadrat)
+                const size = 10;
+
+                // AB tomoni yo'nalishi
+                const abLen = Math.sqrt((points[1].x - points[0].x) ** 2 + (points[1].y - points[0].y) ** 2);
+                const abDx = (points[1].x - points[0].x) / abLen;
+                const abDy = (points[1].y - points[0].y) / abLen;
+
+                // Balandlik yo'nalishi (H dan C ga - yuqoriga qarab)
+                const hDirX = (points[2].x - hx) / hLen;
+                const hDirY = (points[2].y - hy) / hLen;
+
+                // Draw right angle mark - simple L shape
+                ctx.strokeStyle = COLORS.accent;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+
+                // Start point along AB. Agar balandlik tashqariga tushsa, uchburchak tomoniga qarab chizamiz
+                const sign = (t < 0) ? 1 : -1;
+                const startX = hx + abDx * size * sign;
+                const startY = hy + abDy * size * sign;
+
+                // Corner point (up from start towards C)
+                const cornerX = startX + hDirX * size;
+                const cornerY = startY + hDirY * size;
+
+                // End point (straight up from H towards C)
+                const endX = hx + hDirX * size;
+                const endY = hy + hDirY * size;
+
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(cornerX, cornerY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // Burchak yoylari
+        if (anim.angles > 0.001) {
+            const arcRadius = 25;
+
+            points.forEach((point, i) => {
+                const prev = points[(i + 2) % 3];
+                const next = points[(i + 1) % 3];
+
+                const angle1 = Math.atan2(prev.y - point.y, prev.x - point.x);
+                const angle2 = Math.atan2(next.y - point.y, next.x - point.x);
+
+                // Burchak yoyi - to'g'ri yo'nalishni aniqlash
+                // Uchburchak ichidagi burchakni chizish uchun kichik yoyni tanlash kerak
+                let startAngle = angle1;
+                let endAngle = angle2;
+
+                // Burchaklar orasidagi farqni hisoblash
+                let diff = endAngle - startAngle;
+
+                // Farqni [-π, π] oralig'iga keltirish
+                while (diff > Math.PI) diff -= 2 * Math.PI;
+                while (diff < -Math.PI) diff += 2 * Math.PI;
+
+                // Agar farq musbat bo'lsa (0..180), soat yo'nalishida chizish (counterclockwise = false)
+                // Agar manfiy bo'lsa (-180..0), soat yo'nalishiga qarshi chizish (counterclockwise = true)
+                const counterclockwise = diff < 0;
+
+                // Animatsiya: yoylar birin-ketin sweep bilan ochiladi
+                const prog = stagger(anim.angles, i);
+                if (prog <= 0) return;
+                const animEnd = startAngle + diff * prog;
+
+                // Burchak yoyi gradient
+                const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, arcRadius);
+                gradient.addColorStop(0, 'rgba(139, 92, 246, 0.3)');
+                gradient.addColorStop(1, 'rgba(139, 92, 246, 0.1)');
+
+                ctx.beginPath();
+                ctx.moveTo(point.x, point.y);
+                ctx.arc(point.x, point.y, arcRadius, startAngle, animEnd, counterclockwise);
+                ctx.closePath();
+                ctx.fillStyle = gradient;
+                ctx.fill();
+
+                // Gradus yozuvi yoy ochilib bo'lgach paydo bo'ladi
+                if (prog < 0.6) return;
+                ctx.save();
+                ctx.globalAlpha = clamp01((prog - 0.6) / 0.4);
+
+                // Burchak qiymati - o'rta burchakni to'g'ri hisoblash
+                // O'rta burchak ichki yoy markazida bo'lishi kerak
+                let midAngle;
+                if (counterclockwise) {
+                    // Soat yo'nalishiga qarshi - startAngle dan diff/2 ni ayirish
+                    midAngle = startAngle - Math.abs(diff) / 2;
+                } else {
+                    // Soat yo'nalishida - startAngle ga diff/2 ni qo'shish
+                    midAngle = startAngle + Math.abs(diff) / 2;
+                }
+
+                const textRadius = arcRadius + 20;
+                const angleText = `${point.angle.toFixed(1)}°`;
+                ctx.font = 'bold 12px Inter, sans-serif';
+                const textWidth = ctx.measureText(angleText).width + 8;
+
+                // To'qnashuvsiz joylashtirish (yoydan tashqariga qarab suriladi)
+                const aPos = placeLabel(
+                    point.x + Math.cos(midAngle) * textRadius,
+                    point.y + Math.sin(midAngle) * textRadius,
+                    textWidth, 18, Math.cos(midAngle), Math.sin(midAngle)
+                );
+                const tx = aPos.x, ty = aPos.y;
+
+                // Background for readability
+                ctx.fillStyle = 'rgba(23, 23, 31, 0.8)';
+                ctx.beginPath();
+                ctx.roundRect(tx - textWidth / 2, ty - 9, textWidth, 18, 4);
+                ctx.fill();
+
+                ctx.fillStyle = COLORS.purple;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(angleText, tx, ty);
+                ctx.restore();
+            });
+        }
+
+        // Tashqi burchak yoylari
+        if (anim.external > 0.001) {
+            const extArcRadius = 35;
+
+            points.forEach((point, i) => {
+                const prev = points[(i + 2) % 3];
+                const next = points[(i + 1) % 3];
+
+                // Ichki burchak yo'nalishlari
+                const angleToPrev = Math.atan2(prev.y - point.y, prev.x - point.x);
+                const angleToNext = Math.atan2(next.y - point.y, next.x - point.x);
+
+                // Tashqi burchak = 180° - ichki burchak
+                const externalAngle = 180 - point.angle;
+
+                // Tashqi burchak uchun: tomonlardan birining davomini (180° burilish) va boshqa tomon orasida
+                // Tashqi burchak "prev" tomoni davomi va "next" tomoni orasida
+                const extAngleStart = angleToNext;
+                const extAngleEnd = angleToPrev + Math.PI; // prev tomoni davomi (180° burilgan)
+
+                // Burchaklar orasidagi farqni hisoblash
+                let diff = extAngleEnd - extAngleStart;
+
+                // Farqni [-π, π] oralig'iga keltirish
+                while (diff > Math.PI) diff -= 2 * Math.PI;
+                while (diff < -Math.PI) diff += 2 * Math.PI;
+
+                // Kichik yoyni tanlash uchun yo'nalishni aniqlash
+                // Tashqi burchak uchun bizga katta yoy kerak (180° dan katta)
+                // Shuning uchun teskari yo'nalishda chizamiz
+                const counterclockwise = diff < 0;
+
+                // Animatsiya: har bir cho'qqi yoyini birin-ketin, sweep bilan chizish
+                const prog = stagger(anim.external, i);
+                if (prog <= 0) return;
+                const animEnd = extAngleStart + diff * prog;
+
+                // Tashqi burchak gradiyent rangi
+                const extGradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, extArcRadius);
+                extGradient.addColorStop(0, 'rgba(6, 182, 212, 0.4)');
+                extGradient.addColorStop(1, 'rgba(6, 182, 212, 0.1)');
+
+                ctx.beginPath();
+                ctx.moveTo(point.x, point.y);
+                ctx.arc(point.x, point.y, extArcRadius, extAngleStart, animEnd, counterclockwise);
+                ctx.closePath();
+                ctx.fillStyle = extGradient;
+                ctx.fill();
+
+                // Tashqi burchak yoy chizig'i
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, extArcRadius, extAngleStart, animEnd, counterclockwise);
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 2]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Yozuv yoy chizilib bo'lgach paydo bo'ladi (fade-in)
+                if (prog < 0.65) return;
+                ctx.save();
+                ctx.globalAlpha = clamp01((prog - 0.65) / 0.35);
+
+                // Tashqi burchak qiymati joylashuvi - o'rta burchakni to'g'ri hisoblash
+                let midAngle;
+                if (counterclockwise) {
+                    // Soat yo'nalishiga qarshi chizilgan
+                    midAngle = extAngleStart - Math.abs(diff) / 2;
+                } else {
+                    // Soat yo'nalishida chizilgan
+                    midAngle = extAngleStart + Math.abs(diff) / 2;
+                }
+
+                const extTextRadius = extArcRadius + 20;
+
+                // Tashqi burchak label fon (to'qnashuvsiz joylashtirish)
+                const extLabel = `${externalAngle.toFixed(1)}°`;
+                ctx.font = 'bold 11px Inter, sans-serif';
+                const extTextWidth = ctx.measureText(extLabel).width + 10;
+                const ePos = placeLabel(
+                    point.x + Math.cos(midAngle) * extTextRadius,
+                    point.y + Math.sin(midAngle) * extTextRadius,
+                    extTextWidth, 20, Math.cos(midAngle), Math.sin(midAngle)
+                );
+                const etx = ePos.x, ety = ePos.y;
+                ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
+                ctx.beginPath();
+                ctx.roundRect(etx - extTextWidth / 2, ety - 10, extTextWidth, 20, 4);
+                ctx.fill();
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Tashqi burchak qiymati matni
+                ctx.fillStyle = '#06b6d4';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(extLabel, etx, ety);
+                ctx.restore();
+            });
+        }
+
+        // Medianlar
+        if (anim.median > 0.001) {
+            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
+            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
+            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
+
+            // Har bir cho'qqidan qarama-qarshi tomon o'rtasiga chiziq
+            const medians = [
+                { vertex: 0, side: [1, 2], color: '#f43f5e', label: 'mₐ' }, // A dan BC o'rtasiga
+                { vertex: 1, side: [0, 2], color: '#a855f7', label: 'mᵦ' }, // B dan AC o'rtasiga
+                { vertex: 2, side: [0, 1], color: '#22c55e', label: 'mᴄ' }  // C dan AB o'rtasiga
+            ];
+
+            medians.forEach((median, mIdx) => {
+                const vertexPoint = points[median.vertex];
+                // Qarama-qarshi tomon o'rtasi
+                const midX = (points[median.side[0]].x + points[median.side[1]].x) / 2;
+                const midY = (points[median.side[0]].y + points[median.side[1]].y) / 2;
+
+                // Animatsiya: chiziq cho'qqidan o'rta tomon o'sib chiqadi
+                const prog = stagger(anim.median, mIdx);
+                if (prog <= 0) return;
+                const growX = vertexPoint.x + (midX - vertexPoint.x) * prog;
+                const growY = vertexPoint.y + (midY - vertexPoint.y) * prog;
+
+                // Median chizig'i
+                ctx.beginPath();
+                ctx.moveTo(vertexPoint.x, vertexPoint.y);
+                ctx.lineTo(growX, growY);
+                ctx.strokeStyle = median.color;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // O'rta nuqta va yozuv chiziq yetib borgach paydo bo'ladi
+                if (prog < 0.7) return;
+                ctx.save();
+                ctx.globalAlpha = clamp01((prog - 0.7) / 0.3);
+
+                // O'rta nuqta belgisi
+                ctx.beginPath();
+                ctx.arc(midX, midY, 4, 0, Math.PI * 2);
+                ctx.fillStyle = median.color;
+                ctx.fill();
+
+                // Median label - cho'qqiga yaqinroq joylashtiramiz (markaziy to'planishni kamaytirish uchun)
+                const mFrac = 0.34;
+                const labelX = vertexPoint.x + (midX - vertexPoint.x) * mFrac;
+                const labelY = vertexPoint.y + (midY - vertexPoint.y) * mFrac;
+
+                // Label offset (median chizig'iga perpendikulyar)
+                const dx = midX - vertexPoint.x;
+                const dy = midY - vertexPoint.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                let offsetX = -dy / len * 18;
+                let offsetY = dx / len * 18;
+
+                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
+                const testX = labelX + offsetX;
+                const testY = labelY + offsetY;
+                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
+                const distFromLabel = Math.sqrt((labelX - centroidX) ** 2 + (labelY - centroidY) ** 2);
+
+                if (distToCentroid < distFromLabel) {
+                    offsetX = -offsetX;
+                    offsetY = -offsetY;
+                }
+
+                ctx.font = 'bold 11px Inter, sans-serif';
+                const textWidth = ctx.measureText(median.label).width + 8;
+                const mPos = placeLabel(labelX + offsetX, labelY + offsetY, textWidth, 20, offsetX, offsetY);
+                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+                ctx.beginPath();
+                ctx.roundRect(mPos.x - textWidth / 2, mPos.y - 10, textWidth, 20, 4);
+                ctx.fill();
+                ctx.strokeStyle = median.color;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = median.color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(median.label, mPos.x, mPos.y);
+                ctx.restore();
+            });
+
+            // Og'irlik markazi (Centroid) - medianlar kesishgan joy
+            // Animatsiya: barcha medianlar chizilgach paydo bo'ladi
+            ctx.save();
+            ctx.globalAlpha = clamp01((anim.median - 0.75) / 0.25);
+            // Centroid nuqtasi
+            ctx.beginPath();
+            ctx.arc(centroidX, centroidY, 8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.3)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(centroidX, centroidY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#fbbf24';
+            ctx.fill();
+
+            // Centroid label (to'qnashuvsiz joylashtirish)
+            ctx.font = 'bold 11px Inter, sans-serif';
+            const gPos = placeLabel(centroidX + 23, centroidY, 22, 20, 1, 0);
+            ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+            ctx.beginPath();
+            ctx.roundRect(gPos.x - 11, gPos.y - 10, 22, 20, 4);
+            ctx.fill();
+            ctx.strokeStyle = '#fbbf24';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.fillStyle = '#fbbf24';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('G', gPos.x, gPos.y);
+            ctx.restore();
+        }
+
+        // Bissektrisalar
+        if (anim.bisector > 0.001) {
+            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
+            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
+            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
+
+            // Har bir cho'qqidan burchakni ikkiga bo'luvchi chiziq
+            const bisectors = [
+                { vertex: 0, oppositeSide: [1, 2], color: '#ec4899', label: 'lₐ' }, // A dan
+                { vertex: 1, oppositeSide: [0, 2], color: '#14b8a6', label: 'lᵦ' }, // B dan
+                { vertex: 2, oppositeSide: [0, 1], color: '#f97316', label: 'lᴄ' }  // C dan
+            ];
+
+            bisectors.forEach((bisector, idx) => {
+                const vertexPoint = points[bisector.vertex];
+                const p1 = points[bisector.oppositeSide[0]];
+                const p2 = points[bisector.oppositeSide[1]];
+
+                // Bissektrisa qarama-qarshi tomonda qayerda kesishishini topish
+                // Bissektrisa teoremasi: BD/DC = AB/AC
+                // Qarama-qarshi tomon uzunliklari
+                const side1Len = Math.sqrt(Math.pow(vertexPoint.x - p1.x, 2) + Math.pow(vertexPoint.y - p1.y, 2));
+                const side2Len = Math.sqrt(Math.pow(vertexPoint.x - p2.x, 2) + Math.pow(vertexPoint.y - p2.y, 2));
+
+                // Kesishish nuqtasi (p1 va p2 orasida, side1Len:side2Len nisbatida)
+                const ratio = side1Len / (side1Len + side2Len);
+                const intersectX = p1.x + ratio * (p2.x - p1.x);
+                const intersectY = p1.y + ratio * (p2.y - p1.y);
+
+                // Animatsiya: chiziq cho'qqidan kesishish nuqtasi tomon o'sib chiqadi
+                const prog = stagger(anim.bisector, idx);
+                if (prog <= 0) return;
+                const growX = vertexPoint.x + (intersectX - vertexPoint.x) * prog;
+                const growY = vertexPoint.y + (intersectY - vertexPoint.y) * prog;
+
+                // Bissektrisa chizig'i
+                ctx.beginPath();
+                ctx.moveTo(vertexPoint.x, vertexPoint.y);
+                ctx.lineTo(growX, growY);
+                ctx.strokeStyle = bisector.color;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Kesishish nuqtasi va yozuv chiziq yetib borgach paydo bo'ladi
+                if (prog < 0.7) return;
+                ctx.save();
+                ctx.globalAlpha = clamp01((prog - 0.7) / 0.3);
+
+                // Kesishish nuqtasi belgisi
+                ctx.beginPath();
+                ctx.arc(intersectX, intersectY, 4, 0, Math.PI * 2);
+                ctx.fillStyle = bisector.color;
+                ctx.fill();
+
+                // Bissektrisa label - tomonga yaqinroq joylashtiramiz (median yozuvlaridan ajratish uchun)
+                const lFrac = 0.66;
+                const labelX = vertexPoint.x + (intersectX - vertexPoint.x) * lFrac;
+                const labelY = vertexPoint.y + (intersectY - vertexPoint.y) * lFrac;
+
+                const dx = intersectX - vertexPoint.x;
+                const dy = intersectY - vertexPoint.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                let offsetX = -dy / len * 18;
+                let offsetY = dx / len * 18;
+
+                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
+                const testX = labelX + offsetX;
+                const testY = labelY + offsetY;
+                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
+                const distFromLabel = Math.sqrt((labelX - centroidX) ** 2 + (labelY - centroidY) ** 2);
+
+                if (distToCentroid < distFromLabel) {
+                    offsetX = -offsetX;
+                    offsetY = -offsetY;
+                }
+
+                ctx.font = 'bold 11px Inter, sans-serif';
+                const textWidth = ctx.measureText(bisector.label).width + 8;
+                const biPos = placeLabel(labelX + offsetX, labelY + offsetY, textWidth, 20, offsetX, offsetY);
+                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+                ctx.beginPath();
+                ctx.roundRect(biPos.x - textWidth / 2, biPos.y - 10, textWidth, 20, 4);
+                ctx.fill();
+                ctx.strokeStyle = bisector.color;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = bisector.color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(bisector.label, biPos.x, biPos.y);
+                ctx.restore();
+            });
+
+            // Incenter (bissektrisalar kesishgan nuqta) - ichki chizilgan aylana markazi
+            // Animatsiya: bissektrisalar chizilgach paydo bo'ladi
+            ctx.save();
+            ctx.globalAlpha = clamp01((anim.bisector - 0.75) / 0.25);
+            // Incenter koordinatalari: (a*Ax + b*Bx + c*Cx)/(a+b+c), (a*Ay + b*By + c*Cy)/(a+b+c)
+            const perimeter = a + b + c;
+            const incenterX = (a * points[0].x + b * points[1].x + c * points[2].x) / perimeter;
+            const incenterY = (a * points[0].y + b * points[1].y + c * points[2].y) / perimeter;
+
+            // Incenter nuqtasi
+            ctx.beginPath();
+            ctx.arc(incenterX, incenterY, 8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(236, 72, 153, 0.3)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(incenterX, incenterY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ec4899';
+            ctx.fill();
+
+            // Incenter label (to'qnashuvsiz joylashtirish)
+            ctx.font = 'bold 11px Inter, sans-serif';
+            const iPos = placeLabel(incenterX + 21, incenterY, 18, 20, 1, 0);
+            ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+            ctx.beginPath();
+            ctx.roundRect(iPos.x - 9, iPos.y - 10, 18, 20, 4);
+            ctx.fill();
+            ctx.strokeStyle = '#ec4899';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.fillStyle = '#ec4899';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('I', iPos.x, iPos.y);
+            ctx.restore();
+        }
+
+        // Ichki aylana (Incircle)
+        if (anim.incircle > 0.001) {
+            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
+            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
+            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
+
+            // Incenter koordinatalari
+            const perimeter = a + b + c;
+            const incenterX = (a * points[0].x + b * points[1].x + c * points[2].x) / perimeter;
+            const incenterY = (a * points[0].y + b * points[1].y + c * points[2].y) / perimeter;
+
+            // Inradius (ichki aylana radiusi) - to'g'ridan-to'g'ri piksel koordinatalaridan
+            // (scale o'zgaruvchisiga tayanmaydi, ikkala canvasda ham to'g'ri ishlaydi)
+            const dpx = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+            const abPx = dpx(points[0], points[1]);
+            const bcPx = dpx(points[1], points[2]);
+            const caPx = dpx(points[2], points[0]);
+            const sPx = (abPx + bcPx + caPx) / 2;
+            const areaPx = Math.sqrt(Math.max(0, sPx * (sPx - abPx) * (sPx - bcPx) * (sPx - caPx)));
+            const inradiusScaled = sPx > 0 ? areaPx / sPx : 0;
+
+            // Animatsiya progressi
+            const inProg = anim.incircle;
+            ctx.save();
+
+            // Aylana ichki gradient (asta paydo bo'ladi)
+            ctx.globalAlpha = inProg;
+            const incircleGradient = ctx.createRadialGradient(
+                incenterX, incenterY, 0,
+                incenterX, incenterY, inradiusScaled
+            );
+            incircleGradient.addColorStop(0, 'rgba(34, 211, 238, 0.15)');
+            incircleGradient.addColorStop(1, 'rgba(34, 211, 238, 0.05)');
+            ctx.beginPath();
+            ctx.arc(incenterX, incenterY, inradiusScaled, 0, Math.PI * 2);
+            ctx.fillStyle = incircleGradient;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            // Ichki aylana chizish (yuqoridan sweep bilan aylanib chiziladi)
+            ctx.beginPath();
+            ctx.arc(incenterX, incenterY, inradiusScaled, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * inProg);
+            ctx.strokeStyle = '#22d3ee';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([]);
+            ctx.stroke();
+
+            // Incenter nuqtasi (boshidayoq tez paydo bo'ladi)
+            ctx.globalAlpha = clamp01(inProg * 2);
+            ctx.beginPath();
+            ctx.arc(incenterX, incenterY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(34, 211, 238, 0.4)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(incenterX, incenterY, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#22d3ee';
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            // Radius chizig'i (markazdan AB tomonga perpendikulyar)
+            const abDx = points[1].x - points[0].x;
+            const abDy = points[1].y - points[0].y;
+            const abLen = Math.sqrt(abDx * abDx + abDy * abDy);
+
+            // Perpendikulyar yo'nalish (AB tomonga)
+            let perpX = -abDy / abLen;
+            let perpY = abDx / abLen;
+
+            // Incenterdan AB tomonga perpendikulyar nuqtani topish
+            // Incenterdan AB chizig'iga proyeksiya
+            const t = ((incenterX - points[0].x) * abDx + (incenterY - points[0].y) * abDy) / (abLen * abLen);
+            const footX = points[0].x + t * abDx;
+            const footY = points[0].y + t * abDy;
+
+            // Radius chizig'i (incenterdan AB tomon ustidagi nuqtaga)
+            // Animatsiya: aylana yarmidan oshgach markazdan o'sib chiqadi
+            const rProg = clamp01((inProg - 0.45) / 0.45);
+            if (rProg > 0) {
+                ctx.beginPath();
+                ctx.moveTo(incenterX, incenterY);
+                ctx.lineTo(incenterX + (footX - incenterX) * rProg, incenterY + (footY - incenterY) * rProg);
+                ctx.strokeStyle = '#22d3ee';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([3, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Yozuvlar animatsiya oxirida paydo bo'ladi
+            ctx.globalAlpha = clamp01((inProg - 0.75) / 0.25);
+
+            // Radius label - radius chizig'iga perpendikulyar, tashqarida
+            const rMidX = (incenterX + footX) / 2;
+            const rMidY = (incenterY + footY) / 2;
+
+            // Radius chizig'iga perpendikulyar yo'nalish
+            const rDx = footX - incenterX;
+            const rDy = footY - incenterY;
+            const rLen = Math.sqrt(rDx * rDx + rDy * rDy);
+
+            if (rLen > 1) {
+                let rOffsetX = -rDy / rLen * 18;
+                let rOffsetY = rDx / rLen * 18;
+
+                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
+                const testX = rMidX + rOffsetX;
+                const testY = rMidY + rOffsetY;
+                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
+                const distFromMid = Math.sqrt((rMidX - centroidX) ** 2 + (rMidY - centroidY) ** 2);
+
+                if (distToCentroid < distFromMid) {
+                    rOffsetX = -rOffsetX;
+                    rOffsetY = -rOffsetY;
+                }
+
+                ctx.font = 'bold 11px Inter, sans-serif';
+                const rPos = placeLabel(rMidX + rOffsetX, rMidY + rOffsetY, 20, 20, rOffsetX, rOffsetY);
+                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+                ctx.beginPath();
+                ctx.roundRect(rPos.x - 10, rPos.y - 10, 20, 20, 4);
+                ctx.fill();
+                ctx.strokeStyle = '#22d3ee';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = '#22d3ee';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('r', rPos.x, rPos.y);
+            }
+
+            // Incenter label (agar bissektrisa ko'rsatilmagan bo'lsa)
+            if (anim.bisector <= 0.001) {
+                ctx.font = 'bold 11px Inter, sans-serif';
+                const iiPos = placeLabel(incenterX + 19, incenterY - 8, 18, 20, 1, -0.5);
+                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+                ctx.beginPath();
+                ctx.roundRect(iiPos.x - 9, iiPos.y - 10, 18, 20, 4);
+                ctx.fill();
+                ctx.strokeStyle = '#22d3ee';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = '#22d3ee';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('I', iiPos.x, iiPos.y);
+            }
+            ctx.restore();
+        }
+
+        // Tashqi aylana (Circumcircle)
+        if (anim.circumcircle > 0.001) {
+            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
+            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
+            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
+
+            // Circumcenter - uchburchak cho'qqilaridan teng masofada bo'lgan nuqta
+            // Circumcenter formulasi
+            const ax = points[0].x, ay = points[0].y;
+            const bx = points[1].x, by = points[1].y;
+            const cx = points[2].x, cy = points[2].y;
+
+            const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+
+            if (Math.abs(d) > 0.0001) {
+                const circumcenterX = ((ax * ax + ay * ay) * (by - cy) +
+                    (bx * bx + by * by) * (cy - ay) +
+                    (cx * cx + cy * cy) * (ay - by)) / d;
+                const circumcenterY = ((ax * ax + ay * ay) * (cx - bx) +
+                    (bx * bx + by * by) * (ax - cx) +
+                    (cx * cx + cy * cy) * (bx - ax)) / d;
+
+                // Circumradius - markazdan cho'qqigacha masofa
+                const circumradiusScaled = Math.sqrt(
+                    Math.pow(circumcenterX - ax, 2) +
+                    Math.pow(circumcenterY - ay, 2)
+                );
+
+                // Animatsiya progressi
+                const ccProg = anim.circumcircle;
+                ctx.save();
+
+                // Aylana ichki gradient (asta paydo bo'ladi)
+                ctx.globalAlpha = ccProg;
+                const circumGradient = ctx.createRadialGradient(
+                    circumcenterX, circumcenterY, circumradiusScaled * 0.7,
+                    circumcenterX, circumcenterY, circumradiusScaled
+                );
+                circumGradient.addColorStop(0, 'rgba(168, 85, 247, 0)');
+                circumGradient.addColorStop(1, 'rgba(168, 85, 247, 0.08)');
+                ctx.beginPath();
+                ctx.arc(circumcenterX, circumcenterY, circumradiusScaled, 0, Math.PI * 2);
+                ctx.fillStyle = circumGradient;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+
+                // Tashqi aylana chizish (yuqoridan sweep bilan aylanib chiziladi)
+                ctx.beginPath();
+                ctx.arc(circumcenterX, circumcenterY, circumradiusScaled, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ccProg);
+                ctx.strokeStyle = '#a855f7';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([]);
+                ctx.stroke();
+
+                // Circumcenter nuqtasi (boshidayoq tez paydo bo'ladi)
+                ctx.globalAlpha = clamp01(ccProg * 2);
+                ctx.beginPath();
+                ctx.arc(circumcenterX, circumcenterY, 6, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(168, 85, 247, 0.4)';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(circumcenterX, circumcenterY, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#a855f7';
+                ctx.fill();
+                ctx.globalAlpha = 1;
+
+                // Radius chizig'i (markazdan A cho'qqisiga)
+                // Animatsiya: aylana yarmidan oshgach markazdan o'sib chiqadi
+                const ccrProg = clamp01((ccProg - 0.45) / 0.45);
+                if (ccrProg > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(circumcenterX, circumcenterY);
+                    ctx.lineTo(circumcenterX + (ax - circumcenterX) * ccrProg, circumcenterY + (ay - circumcenterY) * ccrProg);
+                    ctx.strokeStyle = '#a855f7';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([3, 3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // Yozuvlar animatsiya oxirida paydo bo'ladi
+                ctx.globalAlpha = clamp01((ccProg - 0.75) / 0.25);
+
+                // Radius label
+                const rLabelMidX = (circumcenterX + ax) / 2;
+                const rLabelMidY = (circumcenterY + ay) / 2;
+
+                // Radius chizig'iga perpendikulyar yo'nalish
+                const rdx = ax - circumcenterX;
+                const rdy = ay - circumcenterY;
+                const rLen = Math.sqrt(rdx * rdx + rdy * rdy);
+
+                if (rLen > 1) {
+                    let rOffsetX = -rdy / rLen * 18;
+                    let rOffsetY = rdx / rLen * 18;
+
+                    // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
+                    const testX = rLabelMidX + rOffsetX;
+                    const testY = rLabelMidY + rOffsetY;
+                    const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
+                    const distFromMid = Math.sqrt((rLabelMidX - centroidX) ** 2 + (rLabelMidY - centroidY) ** 2);
+
+                    if (distToCentroid < distFromMid) {
+                        rOffsetX = -rOffsetX;
+                        rOffsetY = -rOffsetY;
+                    }
+
+                    ctx.font = 'bold 11px Inter, sans-serif';
+                    const cRPos = placeLabel(rLabelMidX + rOffsetX, rLabelMidY + rOffsetY, 24, 20, rOffsetX, rOffsetY);
+                    ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+                    ctx.beginPath();
+                    ctx.roundRect(cRPos.x - 12, cRPos.y - 10, 24, 20, 4);
+                    ctx.fill();
+                    ctx.strokeStyle = '#a855f7';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#a855f7';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('R', cRPos.x, cRPos.y);
+                }
+
+                // Circumcenter label - centroiddan teskari yo'nalishda
+                let oOffsetX = 15;
+                let oOffsetY = 15;
+
+                // Circumcenterdan centroidga yo'nalish
+                const toCentroidX = centroidX - circumcenterX;
+                const toCentroidY = centroidY - circumcenterY;
+                const toCentroidLen = Math.sqrt(toCentroidX * toCentroidX + toCentroidY * toCentroidY);
+
+                if (toCentroidLen > 1) {
+                    // Centroiddan teskari yo'nalishda label qo'yish
+                    oOffsetX = -toCentroidX / toCentroidLen * 20;
+                    oOffsetY = -toCentroidY / toCentroidLen * 20;
+                }
+
+                ctx.font = 'bold 11px Inter, sans-serif';
+                const oPos = placeLabel(circumcenterX + oOffsetX, circumcenterY + oOffsetY, 20, 20, oOffsetX, oOffsetY);
+                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+                ctx.beginPath();
+                ctx.roundRect(oPos.x - 10, oPos.y - 10, 20, 20, 4);
+                ctx.fill();
+                ctx.strokeStyle = '#a855f7';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = '#a855f7';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('O', oPos.x, oPos.y);
+                ctx.restore();
+            }
+        }
+
+        // Gipotenuza (to'g'ri burchakli uchburchak uchun)
+        if (anim.hypotenuse > 0.001) {
+            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
+            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
+            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
+
+            // To'g'ri burchak bor-yo'qligini tekshirish
+            const isRightA = Math.abs(angleA - 90) < 1;
+            const isRightB = Math.abs(angleB - 90) < 1;
+            const isRightC = Math.abs(angleC - 90) < 1;
+            const isRightTriangle = isRightA || isRightB || isRightC;
+
+            if (isRightTriangle) {
+                // Gipotenuza - to'g'ri burchakka qarama-qarshi tomon (eng uzun tomon)
+                let hypPoints, hypLabel, leg1, leg2, rightAnglePoint;
+
+                if (isRightA) {
+                    // A = 90°, gipotenuza = a (B va C orasida)
+                    hypPoints = [points[1], points[2]];
+                    hypLabel = 'a';
+                    leg1 = 'b';
+                    leg2 = 'c';
+                    rightAnglePoint = points[0];
+                } else if (isRightB) {
+                    // B = 90°, gipotenuza = b (A va C orasida)
+                    hypPoints = [points[0], points[2]];
+                    hypLabel = 'b';
+                    leg1 = 'a';
+                    leg2 = 'c';
+                    rightAnglePoint = points[1];
+                } else {
+                    // C = 90°, gipotenuza = c (A va B orasida)
+                    hypPoints = [points[0], points[1]];
+                    hypLabel = 'c';
+                    leg1 = 'a';
+                    leg2 = 'b';
+                    rightAnglePoint = points[2];
+                }
+
+                // Animatsiya: chiziq bir uchidan ikkinchisiga o'sib chiqadi
+                const hypProg = anim.hypotenuse;
+                const lineProg = clamp01(hypProg / 0.6);
+                const hypEndX = hypPoints[0].x + (hypPoints[1].x - hypPoints[0].x) * lineProg;
+                const hypEndY = hypPoints[0].y + (hypPoints[1].y - hypPoints[0].y) * lineProg;
+                ctx.save();
+
+                // Gipotenuza chizig'ini ajratib ko'rsatish
+                ctx.beginPath();
+                ctx.moveTo(hypPoints[0].x, hypPoints[0].y);
+                ctx.lineTo(hypEndX, hypEndY);
+                ctx.strokeStyle = '#f43f5e';
+                ctx.lineWidth = 5;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                // Gipotenuza ustida yaltiroq effekt
+                ctx.globalAlpha = hypProg;
+                ctx.beginPath();
+                ctx.moveTo(hypPoints[0].x, hypPoints[0].y);
+                ctx.lineTo(hypEndX, hypEndY);
+                ctx.strokeStyle = 'rgba(244, 63, 94, 0.3)';
+                ctx.lineWidth = 12;
+                ctx.stroke();
+
+                // 90° belgisi chiziq chizilgach paydo bo'ladi
+                ctx.globalAlpha = clamp01((hypProg - 0.5) / 0.3);
+
+                // To'g'ri burchak belgisi (90° uchun kvadrat)
+                const sqSize = 15;
+                const prev = hypPoints[0];
+                const next = hypPoints[1];
+
+                // Ikki tomon yo'nalishlari
+                const dir1x = (prev.x - rightAnglePoint.x);
+                const dir1y = (prev.y - rightAnglePoint.y);
+                const len1 = Math.sqrt(dir1x * dir1x + dir1y * dir1y);
+                const norm1x = dir1x / len1 * sqSize;
+                const norm1y = dir1y / len1 * sqSize;
+
+                const dir2x = (next.x - rightAnglePoint.x);
+                const dir2y = (next.y - rightAnglePoint.y);
+                const len2 = Math.sqrt(dir2x * dir2x + dir2y * dir2y);
+                const norm2x = dir2x / len2 * sqSize;
+                const norm2y = dir2y / len2 * sqSize;
+
+                ctx.beginPath();
+                ctx.moveTo(rightAnglePoint.x + norm1x, rightAnglePoint.y + norm1y);
+                ctx.lineTo(rightAnglePoint.x + norm1x + norm2x, rightAnglePoint.y + norm1y + norm2y);
+                ctx.lineTo(rightAnglePoint.x + norm2x, rightAnglePoint.y + norm2y);
+                ctx.strokeStyle = '#f43f5e';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Pifagor labeli animatsiya oxirida paydo bo'ladi
+                ctx.globalAlpha = clamp01((hypProg - 0.65) / 0.35);
+
+                // Pifagor teoremasi labeli
+                const midX = (hypPoints[0].x + hypPoints[1].x) / 2;
+                const midY = (hypPoints[0].y + hypPoints[1].y) / 2;
+
+                const dx = hypPoints[1].x - hypPoints[0].x;
+                const dy = hypPoints[1].y - hypPoints[0].y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                let offsetX = -dy / len * 35;
+                let offsetY = dx / len * 35;
+
+                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
+                const testX = midX + offsetX;
+                const testY = midY + offsetY;
+                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
+                const distFromMid = Math.sqrt((midX - centroidX) ** 2 + (midY - centroidY) ** 2);
+
+                if (distToCentroid < distFromMid) {
+                    offsetX = -offsetX;
+                    offsetY = -offsetY;
+                }
+
+                const pythagorasText = `${hypLabel}² = ${leg1}² + ${leg2}²`;
+                ctx.font = 'bold 12px Inter, sans-serif';
+                const textWidth = ctx.measureText(pythagorasText).width + 16;
+                const pyPos = placeLabel(midX + offsetX, midY + offsetY, textWidth, 28, offsetX, offsetY);
+
+                ctx.fillStyle = 'rgba(244, 63, 94, 0.15)';
+                ctx.beginPath();
+                ctx.roundRect(pyPos.x - textWidth / 2, pyPos.y - 14, textWidth, 28, 6);
+                ctx.fill();
+                ctx.strokeStyle = '#f43f5e';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#f43f5e';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(pythagorasText, pyPos.x, pyPos.y);
+                ctx.restore();
+            } else {
+                // To'g'ri burchakli emas - ogohlantirish (fade-in)
+                ctx.save();
+                ctx.globalAlpha = anim.hypotenuse;
+                ctx.font = 'bold 12px Inter, sans-serif';
+                ctx.fillStyle = 'rgba(244, 63, 94, 0.2)';
+                ctx.beginPath();
+                ctx.roundRect(20, 20, 200, 30, 6);
+                ctx.fill();
+                ctx.strokeStyle = '#f43f5e';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = '#f43f5e';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('⚠ To\'g\'ri burchakli emas!', 30, 35);
+                ctx.restore();
+            }
+        }
+
+        // Tomonlar uzunligi
+        if (anim.sides > 0.001) {
+            // Uchburchak markazini hisoblash (centroid)
+            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
+            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
+
+            const sides = [
+                { p1: 1, p2: 2, label: `a = ${a}${unitSuffix}`, color: '#ef4444' },
+                { p1: 0, p2: 2, label: `b = ${b}${unitSuffix}`, color: '#f59e0b' },
+                { p1: 0, p2: 1, label: `c = ${c}${unitSuffix}`, color: '#10b981' }
+            ];
+
+            sides.forEach((side, sIdx) => {
+                // Animatsiya: yozuvlar birin-ketin fade bilan chiqadi
+                const prog = stagger(anim.sides, sIdx);
+                if (prog <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = prog;
+
+                const midX = (points[side.p1].x + points[side.p2].x) / 2;
+                const midY = (points[side.p1].y + points[side.p2].y) / 2;
+
+                // Offset perpendicular to the side
+                const dx = points[side.p2].x - points[side.p1].x;
+                const dy = points[side.p2].y - points[side.p1].y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                let nx = -dy / len * 25;
+                let ny = dx / len * 25;
+
+                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalishga o'zgartirish
+                // Bu orqali label har doim uchburchak tashqarisida bo'ladi
+                const testX = midX + nx;
+                const testY = midY + ny;
+                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
+                const distFromMid = Math.sqrt((midX - centroidX) ** 2 + (midY - centroidY) ** 2);
+
+                // Agar offset centroidga yaqinroq bo'lsa, teskari yo'nalishga o'zgartirish
+                if (distToCentroid < distFromMid) {
+                    nx = -nx;
+                    ny = -ny;
+                }
+
+                // Background (to'qnashuvsiz joylashtirish)
+                ctx.font = 'bold 12px Inter, sans-serif';
+                const textWidth = ctx.measureText(side.label).width + 16;
+                const sPos = placeLabel(midX + nx, midY + ny, textWidth, 24, nx, ny);
+                const tx = sPos.x, ty = sPos.y;
+                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
+                ctx.beginPath();
+                ctx.roundRect(tx - textWidth / 2, ty - 12, textWidth, 24, 6);
+                ctx.fill();
+                ctx.strokeStyle = side.color;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = side.color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(side.label, tx, ty);
+                ctx.restore();
+            });
+        }
+}
+
+// ===== Ko'rinish elementlari uchun ikki yo'nalishli animatsiya hook'i =====
+// ON: progress 0 -> 1 (850ms), OFF: 1 -> 0 (600ms). Yarim yo'lda almashtirish silliq davom etadi.
+function useFeatureAnimation(flags) {
+    const [animProgress, setAnimProgress] = useState(() => {
+        const init = {};
+        Object.keys(flags).forEach(k => { init[k] = flags[k] ? 1 : 0; });
+        return init;
+    });
+    const progressRef = useRef(null);
+    progressRef.current = animProgress;
+    const prevFlagsRef = useRef(null);
+    const animFramesRef = useRef({});
+
+    // Har renderda flaglarni solishtiramiz — o'zgargan kalit uchun animatsiya boshlaymiz
+    useEffect(() => {
+        if (!prevFlagsRef.current) {
+            prevFlagsRef.current = { ...flags };
+            return;
+        }
+        Object.entries(flags).forEach(([key, value]) => {
+            const wasOn = prevFlagsRef.current[key];
+            prevFlagsRef.current[key] = value;
+            if (wasOn === value) return;
+
+            // ON → 1 ga o'sadi, OFF → 0 ga qaytadi (teskari animatsiya)
+            if (animFramesRef.current[key]) cancelAnimationFrame(animFramesRef.current[key]);
+            const from = progressRef.current[key];
+            const to = value ? 1 : 0;
+            if (from === to) return;
+            // Yarim yo'lda almashtirilsa, qolgan masofaga proporsional davomiylik
+            const duration = (value ? 850 : 600) * Math.abs(to - from);
+            const start = performance.now();
+
+            const step = (now) => {
+                const t = Math.min(1, (now - start) / duration);
+                const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+                setAnimProgress(p => ({ ...p, [key]: from + (to - from) * eased }));
+                if (t < 1) animFramesRef.current[key] = requestAnimationFrame(step);
+            };
+            animFramesRef.current[key] = requestAnimationFrame(step);
+        });
+    });
+
+    useEffect(() => () => {
+        Object.values(animFramesRef.current).forEach(id => cancelAnimationFrame(id));
+    }, []);
+
+    return animProgress;
+}
+
 // Professional Fullscreen Triangle Whiteboard
-function FullscreenTriangleWhiteboard({ sideA, sideB, sideC, unitSymbol, onClose, onSizeChange }) {
+function FullscreenTriangleWhiteboard({ sideA, sideB, sideC, unitSymbol, onClose, onSizeChange, viewFlags, onToggleView, onClearView }) {
     const canvasRef = useRef(null);
     const drawingCanvasRef = useRef(null);
     const containerRef = useRef(null);
+
+    // Ko'rinish elementlari animatsiyasi (asosiy sahifa bilan bir xil tizim)
+    const anim = useFeatureAnimation(viewFlags);
+    const [isViewPanelOpen, setIsViewPanelOpen] = useState(false);
 
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -96,16 +1295,25 @@ function FullscreenTriangleWhiteboard({ sideA, sideB, sideC, unitSymbol, onClose
         
         // Calculate C position using law of cosines
         const cosA = (bScaled * bScaled + cScaled * cScaled - aScaled * aScaled) / (2 * bScaled * cScaled);
-        const sinA = Math.sqrt(1 - cosA * cosA);
+        // Math.max(0, ...) — tomonlar uchburchak tengsizligini buzsa, ildiz ostidagi
+        // qiymat manfiy bo'lib NaN qaytaradi va shakl butunlay yo'qoladi. Shuni oldini olamiz.
+        const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
         const Cx = Ax + bScaled * cosA;
         const Cy = Ay - bScaled * sinA;
-        
+
+        // Burchaklar (kosinuslar teoremasi) - ko'rinish elementlari uchun
+        const toDeg = (v) => Math.acos(Math.max(-1, Math.min(1, v))) * 180 / Math.PI;
+        const angleA = toDeg((b * b + c * c - a * a) / (2 * b * c));
+        const angleB = toDeg((a * a + c * c - b * b) / (2 * a * c));
+        const angleC = 180 - angleA - angleB;
+
         return {
             points: [
-                { x: Ax, y: Ay, label: 'A' },
-                { x: Bx, y: By, label: 'B' },
-                { x: Cx, y: Cy, label: 'C' }
+                { x: Ax, y: Ay, label: 'A', angle: angleA },
+                { x: Bx, y: By, label: 'B', angle: angleB },
+                { x: Cx, y: Cy, label: 'C', angle: angleC }
             ],
+            angles: { angleA, angleB, angleC },
             triScale
         };
     }, [sideA, sideB, sideC, canvasSize]);
@@ -124,21 +1332,26 @@ function FullscreenTriangleWhiteboard({ sideA, sideB, sideC, unitSymbol, onClose
         ctx.scale(scale, scale);
         ctx.translate(-cWidth / 2 + offset.x, -cHeight / 2 + offset.y);
 
-        // Grid
-        const gridSize = 40;
-        ctx.strokeStyle = '#1a1a24';
-        ctx.lineWidth = 0.5 / scale;
-        for (let x = 0; x < cWidth * 2; x += gridSize) {
-            ctx.beginPath();
-            ctx.moveTo(x - cWidth / 2, -cHeight);
-            ctx.lineTo(x - cWidth / 2, cHeight * 2);
-            ctx.stroke();
-        }
-        for (let y = 0; y < cHeight * 2; y += gridSize) {
-            ctx.beginPath();
-            ctx.moveTo(-cWidth, y - cHeight / 2);
-            ctx.lineTo(cWidth * 2, y - cHeight / 2);
-            ctx.stroke();
+        // Grid (fade animatsiya bilan)
+        if (anim.grid > 0.001) {
+            ctx.save();
+            ctx.globalAlpha = anim.grid;
+            const gridSize = 40;
+            ctx.strokeStyle = '#1a1a24';
+            ctx.lineWidth = 0.5 / scale;
+            for (let x = 0; x < cWidth * 2; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x - cWidth / 2, -cHeight);
+                ctx.lineTo(x - cWidth / 2, cHeight * 2);
+                ctx.stroke();
+            }
+            for (let y = 0; y < cHeight * 2; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(-cWidth, y - cHeight / 2);
+                ctx.lineTo(cWidth * 2, y - cHeight / 2);
+                ctx.stroke();
+            }
+            ctx.restore();
         }
 
         if (triangleData) {
@@ -164,6 +1377,26 @@ function FullscreenTriangleWhiteboard({ sideA, sideB, sideC, unitSymbol, onClose
             ctx.strokeStyle = COLORS.primary;
             ctx.lineWidth = 4 / scale;
             ctx.stroke();
+
+            // Cho'qqi yozuvlari (A, B, C) joylashuvini oldindan band qilamiz
+            const vertexSeedRects = points.map((point, i) => {
+                let lx = point.x, ly = point.y;
+                if (i === 0) { lx -= 40 / scale; ly += 30 / scale; }
+                else if (i === 1) { lx += 40 / scale; ly += 30 / scale; }
+                else { ly -= 30 / scale; }
+                return { x: lx - 22 / scale, y: ly - 22 / scale, w: 44 / scale, h: 44 / scale };
+            });
+
+            // Barcha ko'rinish elementlari (asosiy sahifa bilan bir xil, animatsiya bilan)
+            drawTriangleFeatures(ctx, points, {
+                a: sideA, b: sideB, c: sideC,
+                angleA: triangleData.angles.angleA,
+                angleB: triangleData.angles.angleB,
+                angleC: triangleData.angles.angleC,
+                anim,
+                unitSuffix: ` ${unitSymbol}`,
+                seedRects: vertexSeedRects
+            });
 
             // Labels
             points.forEach((point, i) => {
@@ -202,36 +1435,9 @@ function FullscreenTriangleWhiteboard({ sideA, sideB, sideC, unitSymbol, onClose
                 ctx.fillText(point.label, lx, ly);
             });
 
-            // Side labels
-            const sides = [
-                { p1: 0, p2: 1, label: `c = ${sideC} ${unitSymbol}`, color: COLORS.secondary, offset: 35 / scale },
-                { p1: 0, p2: 2, label: `b = ${sideB} ${unitSymbol}`, color: COLORS.primary, offset: -35 / scale },
-                { p1: 1, p2: 2, label: `a = ${sideA} ${unitSymbol}`, color: COLORS.accent, offset: 35 / scale }
-            ];
-            sides.forEach((side, idx) => {
-                const midX = (points[side.p1].x + points[side.p2].x) / 2;
-                const midY = (points[side.p1].y + points[side.p2].y) / 2;
-                
-                ctx.fillStyle = 'rgba(23, 23, 31, 0.95)';
-                ctx.font = `bold ${14 / scale}px Inter, sans-serif`;
-                const textWidth = ctx.measureText(side.label).width + 24 / scale;
-                const offsetX = idx === 1 ? -40 / scale : (idx === 2 ? 40 / scale : 0);
-                const offsetY = idx === 0 ? 35 / scale : (idx === 1 ? -10 / scale : -10 / scale);
-                
-                ctx.beginPath();
-                ctx.roundRect(midX + offsetX - textWidth / 2, midY + offsetY - 16 / scale, textWidth, 32 / scale, 8 / scale);
-                ctx.fill();
-                ctx.strokeStyle = side.color;
-                ctx.lineWidth = 2 / scale;
-                ctx.stroke();
-                ctx.fillStyle = side.color;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(side.label, midX + offsetX, midY + offsetY);
-            });
         }
         ctx.restore();
-    }, [scale, offset, sideA, sideB, sideC, canvasSize, triangleData, unitSymbol]);
+    }, [scale, offset, sideA, sideB, sideC, canvasSize, triangleData, unitSymbol, anim]);
 
     // Drawing canvas
     useEffect(() => {
@@ -354,6 +1560,19 @@ function FullscreenTriangleWhiteboard({ sideA, sideB, sideC, unitSymbol, onClose
             const newA = Math.round(dist(p1, p2) * 10) / 10; // BC
 
             if (newA < 0.5 || newA > 50 || newB < 0.5 || newB > 50 || newC < 0.5 || newC > 50) {
+                return;
+            }
+
+            // Uchburchak tengsizligi: har bir tomon qolgan ikki tomon yig'indisidan
+            // kichik bo'lishi shart. Aks holda uchburchak hosil bo'lmaydi va shakl
+            // yo'qolib qoladi. Chegaraga yetganda o'zgarishni qo'llamaymiz —
+            // shakl oxirgi to'g'ri uchburchak holatida TO'XTAYDI (yo'qolmaydi).
+            const triMargin = 0.1;
+            if (
+                newA + newB <= newC + triMargin ||
+                newB + newC <= newA + triMargin ||
+                newA + newC <= newB + triMargin
+            ) {
                 return;
             }
 
@@ -500,11 +1719,62 @@ function FullscreenTriangleWhiteboard({ sideA, sideB, sideC, unitSymbol, onClose
                 </div>
                 <div className="toolbar-divider" />
                 <div className="whiteboard-actions">
-                    <button className="whiteboard-action-btn clear-btn" onClick={() => setDrawings([])} title="Tozalash">
+                    <button className="whiteboard-action-btn clear-btn" onClick={() => setDrawings([])} title="Faqat chizilganlarni tozalash">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                    </button>
+                    <button className="whiteboard-action-btn clear-all-btn" onClick={() => { setDrawings([]); onClearView(); }} title="Hammasini o'chirish (chizmalar + barcha ko'rinish elementlari)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 20H7L3 16C2 15 2 13 3 12L13 2L22 11L20 20Z" /><line x1="18" y1="9" x2="12" y2="15" /><line x1="12" y1="9" x2="18" y2="15" /></svg>
                     </button>
                 </div>
             </div>
+
+            {/* Ko'rinish paneli tugmasi */}
+            <button className={`wb-view-toggle-btn ${isViewPanelOpen ? 'open' : ''}`} onClick={() => setIsViewPanelOpen(!isViewPanelOpen)} title="Ko'rinish">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                <span className="wb-view-toggle-badge">{Object.values(viewFlags).filter(Boolean).length}</span>
+            </button>
+
+            {/* Ko'rinish paneli (ASOSIY + QO'SHIMCHA) */}
+            {isViewPanelOpen && (
+                <div className="wb-view-panel">
+                    <div className="wb-view-header">
+                        <span>👁 Ko'rinish</span>
+                        <span className="wb-view-badge">{Object.values(viewFlags).filter(Boolean).length}/10</span>
+                    </div>
+                    <div className="wb-view-section-title">◣ ASOSIY</div>
+                    <div className="wb-view-grid">
+                        {[
+                            { key: 'grid', label: 'Grid', icon: '⊞' },
+                            { key: 'angles', label: 'Burchaklar', icon: '∠' },
+                            { key: 'sides', label: 'Tomonlar', icon: '—' },
+                            { key: 'height', label: 'Balandlik', icon: '↕' }
+                        ].map(item => (
+                            <button key={item.key} className={`wb-view-item ${viewFlags[item.key] ? 'active' : ''}`} onClick={() => onToggleView(item.key)}>
+                                <span className="wb-view-icon">{item.icon}</span>
+                                <span className="wb-view-label">{item.label}</span>
+                                <span className={`wb-view-status ${viewFlags[item.key] ? 'on' : 'off'}`}>{viewFlags[item.key] ? 'ON' : 'OFF'}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="wb-view-section-title">✨ QO'SHIMCHA</div>
+                    <div className="wb-view-grid">
+                        {[
+                            { key: 'external', label: 'Tashqi burchak', icon: '↗' },
+                            { key: 'median', label: 'Median', icon: '⋯' },
+                            { key: 'bisector', label: 'Bissektrisa', icon: '∠/' },
+                            { key: 'incircle', label: 'Ichki aylana', icon: '◎' },
+                            { key: 'circumcircle', label: 'Tashqi aylana', icon: '○' },
+                            { key: 'hypotenuse', label: 'Gipotenuza', icon: '⌐' }
+                        ].map(item => (
+                            <button key={item.key} className={`wb-view-item ${viewFlags[item.key] ? 'active' : ''}`} onClick={() => onToggleView(item.key)}>
+                                <span className="wb-view-icon">{item.icon}</span>
+                                <span className="wb-view-label">{item.label}</span>
+                                <span className={`wb-view-status ${viewFlags[item.key] ? 'on' : 'off'}`}>{viewFlags[item.key] ? 'ON' : 'OFF'}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Toast notification */}
             <div className={`toast-notification ${toast.show ? 'show' : ''}`}>
@@ -533,6 +1803,20 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
     const canvasRef = useRef(null);
     const [canvasSize, setCanvasSize] = useState({ width: 700, height: 550 });
 
+    // Ko'rinish elementlari animatsiyasi (umumiy hook)
+    const animProgress = useFeatureAnimation({
+        grid: showGrid,
+        angles: showAngles,
+        sides: showSides,
+        height: showHeight,
+        external: showExternalAngles,
+        median: showMedian,
+        bisector: showBisector,
+        incircle: showIncircle,
+        circumcircle: showCircumcircle,
+        hypotenuse: showHypotenuse
+    });
+
     useEffect(() => {
         const updateSize = () => {
             if (canvasRef.current && canvasRef.current.parentElement) {
@@ -556,8 +1840,10 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, width, height);
 
-        // Grid
-        if (showGrid) {
+        // Grid (fade animatsiya bilan yonadi/o'chadi)
+        if (animProgress.grid > 0.001) {
+            ctx.save();
+            ctx.globalAlpha = animProgress.grid;
             const gridSize = 25;
             const offsetX = (width / 2) % gridSize;
             const offsetY = (height / 2) % gridSize;
@@ -575,6 +1861,7 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
             for (let y = offsetY - gridSize; y >= 0; y -= gridSize) {
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
             }
+            ctx.restore();
         }
 
         if (!isValid) {
@@ -655,909 +1942,18 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
         ctx.lineJoin = 'round';
         ctx.stroke();
 
-        // Balandlik (agar ko'rsatish kerak bo'lsa)
-        if (showHeight) {
-            // C nuqtadan AB ga balandlik
-            const t = ((points[2].x - points[0].x) * (points[1].x - points[0].x) +
-                (points[2].y - points[0].y) * (points[1].y - points[0].y)) /
-                ((points[1].x - points[0].x) ** 2 + (points[1].y - points[0].y) ** 2);
-
-            const hx = points[0].x + t * (points[1].x - points[0].x);
-            const hy = points[0].y + t * (points[1].y - points[0].y);
-
-            // Balandlik chizig'i (dashed)
-            ctx.setLineDash([5, 5]);
-            ctx.strokeStyle = COLORS.accent;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(points[2].x, points[2].y);
-            ctx.lineTo(hx, hy);
-            ctx.stroke();
-
-            // Agar balandlik uchburchak tashqarisiga tushsa, asosni uzaytirib chizamiz
-            if (t < 0) {
-                ctx.beginPath();
-                ctx.moveTo(points[0].x, points[0].y);
-                ctx.lineTo(hx, hy);
-                ctx.stroke();
-            } else if (t > 1) {
-                ctx.beginPath();
-                ctx.moveTo(points[1].x, points[1].y);
-                ctx.lineTo(hx, hy);
-                ctx.stroke();
-            }
-            
-            ctx.setLineDash([]);
-
-            // Balandlik uzunligini hisoblash
-            const heightLength = Math.sqrt((points[2].x - hx) ** 2 + (points[2].y - hy) ** 2);
-
-            // Faqat balandlik 0 dan katta bo'lganda chizish
-            if (heightLength > 1) {
-                // Uchburchak markazini hisoblash
-                const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
-                const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
-
-                // h label joylashuvi - balandlik chizig'ining o'rtasida, uchburchak tashqarisida
-                const midHX = (points[2].x + hx) / 2;
-                const midHY = (points[2].y + hy) / 2;
-
-                // Balandlik chizig'iga perpendikulyar yo'nalish
-                const hdx = hx - points[2].x;
-                const hdy = hy - points[2].y;
-                const hLen = Math.sqrt(hdx * hdx + hdy * hdy);
-                let offsetX = -hdy / hLen * 20;
-                let offsetY = hdx / hLen * 20;
-
-                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
-                const testX = midHX + offsetX;
-                const testY = midHY + offsetY;
-                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
-                const distFromMid = Math.sqrt((midHX - centroidX) ** 2 + (midHY - centroidY) ** 2);
-
-                if (distToCentroid < distFromMid) {
-                    offsetX = -offsetX;
-                    offsetY = -offsetY;
-                }
-
-                const labelX = midHX + offsetX;
-                const labelY = midHY + offsetY;
-
-                // h label foni
-                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-                ctx.font = 'bold 14px Inter, sans-serif';
-                ctx.beginPath();
-                ctx.roundRect(labelX - 12, labelY - 12, 24, 24, 6);
-                ctx.fill();
-                ctx.strokeStyle = COLORS.accent;
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                // h label matni
-                ctx.fillStyle = COLORS.accent;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('h', labelX, labelY);
-
-                // To'g'ri burchak belgisi (90° kvadrat)
-                const size = 10;
-
-                // AB tomoni yo'nalishi
-                const abLen = Math.sqrt((points[1].x - points[0].x) ** 2 + (points[1].y - points[0].y) ** 2);
-                const abDx = (points[1].x - points[0].x) / abLen;
-                const abDy = (points[1].y - points[0].y) / abLen;
-
-                // Balandlik yo'nalishi (H dan C ga - yuqoriga qarab)
-                const hDirX = (points[2].x - hx) / hLen;
-                const hDirY = (points[2].y - hy) / hLen;
-
-                // Draw right angle mark - simple L shape
-                ctx.strokeStyle = COLORS.accent;
-                ctx.lineWidth = 1.5;
-                ctx.beginPath();
-
-                // Start point along AB. Agar balandlik tashqariga tushsa, uchburchak tomoniga qarab chizamiz
-                const sign = (t < 0) ? 1 : -1;
-                const startX = hx + abDx * size * sign;
-                const startY = hy + abDy * size * sign;
-
-                // Corner point (up from start towards C)
-                const cornerX = startX + hDirX * size;
-                const cornerY = startY + hDirY * size;
-
-                // End point (straight up from H towards C)
-                const endX = hx + hDirX * size;
-                const endY = hy + hDirY * size;
-
-                ctx.moveTo(startX, startY);
-                ctx.lineTo(cornerX, cornerY);
-                ctx.lineTo(endX, endY);
-                ctx.stroke();
-            }
-        }
-
-        // Burchak yoylari
-        if (showAngles) {
-            const arcRadius = 25;
-
-            points.forEach((point, i) => {
-                const prev = points[(i + 2) % 3];
-                const next = points[(i + 1) % 3];
-
-                const angle1 = Math.atan2(prev.y - point.y, prev.x - point.x);
-                const angle2 = Math.atan2(next.y - point.y, next.x - point.x);
-
-                // Burchak yoyi - to'g'ri yo'nalishni aniqlash
-                // Uchburchak ichidagi burchakni chizish uchun kichik yoyni tanlash kerak
-                let startAngle = angle1;
-                let endAngle = angle2;
-
-                // Burchaklar orasidagi farqni hisoblash
-                let diff = endAngle - startAngle;
-
-                // Farqni [-π, π] oralig'iga keltirish
-                while (diff > Math.PI) diff -= 2 * Math.PI;
-                while (diff < -Math.PI) diff += 2 * Math.PI;
-
-                // Agar farq musbat bo'lsa (0..180), soat yo'nalishida chizish (counterclockwise = false)
-                // Agar manfiy bo'lsa (-180..0), soat yo'nalishiga qarshi chizish (counterclockwise = true)
-                const counterclockwise = diff < 0;
-
-                // Burchak yoyi gradient
-                const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, arcRadius);
-                gradient.addColorStop(0, 'rgba(139, 92, 246, 0.3)');
-                gradient.addColorStop(1, 'rgba(139, 92, 246, 0.1)');
-
-                ctx.beginPath();
-                ctx.moveTo(point.x, point.y);
-                ctx.arc(point.x, point.y, arcRadius, startAngle, endAngle, counterclockwise);
-                ctx.closePath();
-                ctx.fillStyle = gradient;
-                ctx.fill();
-
-                // Burchak qiymati - o'rta burchakni to'g'ri hisoblash
-                // O'rta burchak ichki yoy markazida bo'lishi kerak
-                let midAngle;
-                if (counterclockwise) {
-                    // Soat yo'nalishiga qarshi - startAngle dan diff/2 ni ayirish
-                    midAngle = startAngle - Math.abs(diff) / 2;
-                } else {
-                    // Soat yo'nalishida - startAngle ga diff/2 ni qo'shish
-                    midAngle = startAngle + Math.abs(diff) / 2;
-                }
-
-                const textRadius = arcRadius + 20;
-                const tx = point.x + Math.cos(midAngle) * textRadius;
-                const ty = point.y + Math.sin(midAngle) * textRadius;
-
-                const angleText = `${point.angle.toFixed(1)}°`;
-                ctx.font = 'bold 12px Inter, sans-serif';
-                const textWidth = ctx.measureText(angleText).width + 8;
-
-                // Background for readability
-                ctx.fillStyle = 'rgba(23, 23, 31, 0.8)';
-                ctx.beginPath();
-                ctx.roundRect(tx - textWidth / 2, ty - 9, textWidth, 18, 4);
-                ctx.fill();
-
-                ctx.fillStyle = COLORS.purple;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(angleText, tx, ty);
-            });
-        }
-
-        // Tashqi burchak yoylari
-        if (showExternalAngles) {
-            const extArcRadius = 35;
-
-            points.forEach((point, i) => {
-                const prev = points[(i + 2) % 3];
-                const next = points[(i + 1) % 3];
-
-                // Ichki burchak yo'nalishlari
-                const angleToPrev = Math.atan2(prev.y - point.y, prev.x - point.x);
-                const angleToNext = Math.atan2(next.y - point.y, next.x - point.x);
-
-                // Tashqi burchak = 180° - ichki burchak
-                const externalAngle = 180 - point.angle;
-
-                // Tashqi burchak uchun: tomonlardan birining davomini (180° burilish) va boshqa tomon orasida
-                // Tashqi burchak "prev" tomoni davomi va "next" tomoni orasida
-                const extAngleStart = angleToNext;
-                const extAngleEnd = angleToPrev + Math.PI; // prev tomoni davomi (180° burilgan)
-
-                // Burchaklar orasidagi farqni hisoblash
-                let diff = extAngleEnd - extAngleStart;
-
-                // Farqni [-π, π] oralig'iga keltirish
-                while (diff > Math.PI) diff -= 2 * Math.PI;
-                while (diff < -Math.PI) diff += 2 * Math.PI;
-
-                // Kichik yoyni tanlash uchun yo'nalishni aniqlash
-                // Tashqi burchak uchun bizga katta yoy kerak (180° dan katta)
-                // Shuning uchun teskari yo'nalishda chizamiz
-                const counterclockwise = diff < 0;
-
-                // Tashqi burchak gradiyent rangi
-                const extGradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, extArcRadius);
-                extGradient.addColorStop(0, 'rgba(6, 182, 212, 0.4)');
-                extGradient.addColorStop(1, 'rgba(6, 182, 212, 0.1)');
-
-                ctx.beginPath();
-                ctx.moveTo(point.x, point.y);
-                ctx.arc(point.x, point.y, extArcRadius, extAngleStart, extAngleEnd, counterclockwise);
-                ctx.closePath();
-                ctx.fillStyle = extGradient;
-                ctx.fill();
-
-                // Tashqi burchak yoy chizig'i
-                ctx.beginPath();
-                ctx.arc(point.x, point.y, extArcRadius, extAngleStart, extAngleEnd, counterclockwise);
-                ctx.strokeStyle = '#06b6d4';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([4, 2]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-
-                // Tashqi burchak qiymati joylashuvi - o'rta burchakni to'g'ri hisoblash
-                let midAngle;
-                if (counterclockwise) {
-                    // Soat yo'nalishiga qarshi chizilgan
-                    midAngle = extAngleStart - Math.abs(diff) / 2;
-                } else {
-                    // Soat yo'nalishida chizilgan
-                    midAngle = extAngleStart + Math.abs(diff) / 2;
-                }
-
-                const extTextRadius = extArcRadius + 20;
-                const etx = point.x + Math.cos(midAngle) * extTextRadius;
-                const ety = point.y + Math.sin(midAngle) * extTextRadius;
-
-                // Tashqi burchak label fon
-                const extLabel = `${externalAngle.toFixed(1)}°`;
-                ctx.font = 'bold 11px Inter, sans-serif';
-                const extTextWidth = ctx.measureText(extLabel).width + 10;
-                ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
-                ctx.beginPath();
-                ctx.roundRect(etx - extTextWidth / 2, ety - 10, extTextWidth, 20, 4);
-                ctx.fill();
-                ctx.strokeStyle = '#06b6d4';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                // Tashqi burchak qiymati matni
-                ctx.fillStyle = '#06b6d4';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(extLabel, etx, ety);
-            });
-        }
-
-        // Medianlar
-        if (showMedian) {
-            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
-            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
-            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
-
-            // Har bir cho'qqidan qarama-qarshi tomon o'rtasiga chiziq
-            const medians = [
-                { vertex: 0, side: [1, 2], color: '#f43f5e', label: 'mₐ' }, // A dan BC o'rtasiga
-                { vertex: 1, side: [0, 2], color: '#a855f7', label: 'mᵦ' }, // B dan AC o'rtasiga
-                { vertex: 2, side: [0, 1], color: '#22c55e', label: 'mᴄ' }  // C dan AB o'rtasiga
-            ];
-
-            medians.forEach(median => {
-                const vertexPoint = points[median.vertex];
-                // Qarama-qarshi tomon o'rtasi
-                const midX = (points[median.side[0]].x + points[median.side[1]].x) / 2;
-                const midY = (points[median.side[0]].y + points[median.side[1]].y) / 2;
-
-                // Median chizig'i
-                ctx.beginPath();
-                ctx.moveTo(vertexPoint.x, vertexPoint.y);
-                ctx.lineTo(midX, midY);
-                ctx.strokeStyle = median.color;
-                ctx.lineWidth = 2;
-                ctx.setLineDash([6, 3]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-
-                // O'rta nuqta belgisi
-                ctx.beginPath();
-                ctx.arc(midX, midY, 4, 0, Math.PI * 2);
-                ctx.fillStyle = median.color;
-                ctx.fill();
-
-                // Median label
-                const labelX = (vertexPoint.x + midX) / 2;
-                const labelY = (vertexPoint.y + midY) / 2;
-
-                // Label offset (median chizig'iga perpendikulyar)
-                const dx = midX - vertexPoint.x;
-                const dy = midY - vertexPoint.y;
-                const len = Math.sqrt(dx * dx + dy * dy);
-                let offsetX = -dy / len * 18;
-                let offsetY = dx / len * 18;
-
-                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
-                const testX = labelX + offsetX;
-                const testY = labelY + offsetY;
-                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
-                const distFromLabel = Math.sqrt((labelX - centroidX) ** 2 + (labelY - centroidY) ** 2);
-
-                if (distToCentroid < distFromLabel) {
-                    offsetX = -offsetX;
-                    offsetY = -offsetY;
-                }
-
-                ctx.font = 'bold 11px Inter, sans-serif';
-                const textWidth = ctx.measureText(median.label).width + 8;
-                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-                ctx.beginPath();
-                ctx.roundRect(labelX + offsetX - textWidth / 2, labelY + offsetY - 10, textWidth, 20, 4);
-                ctx.fill();
-                ctx.strokeStyle = median.color;
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                ctx.fillStyle = median.color;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(median.label, labelX + offsetX, labelY + offsetY);
-            });
-
-            // Og'irlik markazi (Centroid) - medianlar kesishgan joy
-            // Centroid nuqtasi
-            ctx.beginPath();
-            ctx.arc(centroidX, centroidY, 8, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(251, 191, 36, 0.3)';
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.arc(centroidX, centroidY, 5, 0, Math.PI * 2);
-            ctx.fillStyle = '#fbbf24';
-            ctx.fill();
-
-            // Centroid label
-            ctx.font = 'bold 11px Inter, sans-serif';
-            ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-            ctx.beginPath();
-            ctx.roundRect(centroidX + 12, centroidY - 10, 22, 20, 4);
-            ctx.fill();
-            ctx.strokeStyle = '#fbbf24';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            ctx.fillStyle = '#fbbf24';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('G', centroidX + 23, centroidY);
-        }
-
-        // Bissektrisalar
-        if (showBisector) {
-            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
-            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
-            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
-
-            // Har bir cho'qqidan burchakni ikkiga bo'luvchi chiziq
-            const bisectors = [
-                { vertex: 0, oppositeSide: [1, 2], color: '#ec4899', label: 'lₐ' }, // A dan
-                { vertex: 1, oppositeSide: [0, 2], color: '#14b8a6', label: 'lᵦ' }, // B dan
-                { vertex: 2, oppositeSide: [0, 1], color: '#f97316', label: 'lᴄ' }  // C dan
-            ];
-
-            bisectors.forEach((bisector, idx) => {
-                const vertexPoint = points[bisector.vertex];
-                const p1 = points[bisector.oppositeSide[0]];
-                const p2 = points[bisector.oppositeSide[1]];
-
-                // Bissektrisa qarama-qarshi tomonda qayerda kesishishini topish
-                // Bissektrisa teoremasi: BD/DC = AB/AC
-                // Qarama-qarshi tomon uzunliklari
-                const side1Len = Math.sqrt(Math.pow(vertexPoint.x - p1.x, 2) + Math.pow(vertexPoint.y - p1.y, 2));
-                const side2Len = Math.sqrt(Math.pow(vertexPoint.x - p2.x, 2) + Math.pow(vertexPoint.y - p2.y, 2));
-
-                // Kesishish nuqtasi (p1 va p2 orasida, side1Len:side2Len nisbatida)
-                const ratio = side1Len / (side1Len + side2Len);
-                const intersectX = p1.x + ratio * (p2.x - p1.x);
-                const intersectY = p1.y + ratio * (p2.y - p1.y);
-
-                // Bissektrisa chizig'i
-                ctx.beginPath();
-                ctx.moveTo(vertexPoint.x, vertexPoint.y);
-                ctx.lineTo(intersectX, intersectY);
-                ctx.strokeStyle = bisector.color;
-                ctx.lineWidth = 2;
-                ctx.setLineDash([4, 4]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-
-                // Kesishish nuqtasi belgisi
-                ctx.beginPath();
-                ctx.arc(intersectX, intersectY, 4, 0, Math.PI * 2);
-                ctx.fillStyle = bisector.color;
-                ctx.fill();
-
-                // Bissektrisa label
-                const labelX = (vertexPoint.x + intersectX) / 2;
-                const labelY = (vertexPoint.y + intersectY) / 2;
-
-                const dx = intersectX - vertexPoint.x;
-                const dy = intersectY - vertexPoint.y;
-                const len = Math.sqrt(dx * dx + dy * dy);
-                let offsetX = -dy / len * 18;
-                let offsetY = dx / len * 18;
-
-                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
-                const testX = labelX + offsetX;
-                const testY = labelY + offsetY;
-                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
-                const distFromLabel = Math.sqrt((labelX - centroidX) ** 2 + (labelY - centroidY) ** 2);
-
-                if (distToCentroid < distFromLabel) {
-                    offsetX = -offsetX;
-                    offsetY = -offsetY;
-                }
-
-                ctx.font = 'bold 11px Inter, sans-serif';
-                const textWidth = ctx.measureText(bisector.label).width + 8;
-                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-                ctx.beginPath();
-                ctx.roundRect(labelX + offsetX - textWidth / 2, labelY + offsetY - 10, textWidth, 20, 4);
-                ctx.fill();
-                ctx.strokeStyle = bisector.color;
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                ctx.fillStyle = bisector.color;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(bisector.label, labelX + offsetX, labelY + offsetY);
-            });
-
-            // Incenter (bissektrisalar kesishgan nuqta) - ichki chizilgan aylana markazi
-            // Incenter koordinatalari: (a*Ax + b*Bx + c*Cx)/(a+b+c), (a*Ay + b*By + c*Cy)/(a+b+c)
-            const perimeter = a + b + c;
-            const incenterX = (a * points[0].x + b * points[1].x + c * points[2].x) / perimeter;
-            const incenterY = (a * points[0].y + b * points[1].y + c * points[2].y) / perimeter;
-
-            // Incenter nuqtasi
-            ctx.beginPath();
-            ctx.arc(incenterX, incenterY, 8, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(236, 72, 153, 0.3)';
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.arc(incenterX, incenterY, 5, 0, Math.PI * 2);
-            ctx.fillStyle = '#ec4899';
-            ctx.fill();
-
-            // Incenter label
-            ctx.font = 'bold 11px Inter, sans-serif';
-            ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-            ctx.beginPath();
-            ctx.roundRect(incenterX + 12, incenterY - 10, 18, 20, 4);
-            ctx.fill();
-            ctx.strokeStyle = '#ec4899';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            ctx.fillStyle = '#ec4899';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('I', incenterX + 21, incenterY);
-        }
-
-        // Ichki aylana (Incircle)
-        if (showIncircle) {
-            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
-            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
-            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
-
-            // Incenter koordinatalari
-            const perimeter = a + b + c;
-            const incenterX = (a * points[0].x + b * points[1].x + c * points[2].x) / perimeter;
-            const incenterY = (a * points[0].y + b * points[1].y + c * points[2].y) / perimeter;
-
-            // Inradius (ichki aylana radiusi) - scale bo'yicha
-            const s = perimeter / 2; // yarim perimetr
-            const areaSquared = s * (s - a) * (s - b) * (s - c);
-            const area = Math.sqrt(areaSquared);
-            const inradius = area / s;
-            const inradiusScaled = inradius * scale;
-
-            // Ichki aylana chizish
-            ctx.beginPath();
-            ctx.arc(incenterX, incenterY, inradiusScaled, 0, Math.PI * 2);
-            ctx.strokeStyle = '#22d3ee';
-            ctx.lineWidth = 2.5;
-            ctx.setLineDash([]);
-            ctx.stroke();
-
-            // Aylana ichki gradient
-            const incircleGradient = ctx.createRadialGradient(
-                incenterX, incenterY, 0,
-                incenterX, incenterY, inradiusScaled
-            );
-            incircleGradient.addColorStop(0, 'rgba(34, 211, 238, 0.15)');
-            incircleGradient.addColorStop(1, 'rgba(34, 211, 238, 0.05)');
-            ctx.fillStyle = incircleGradient;
-            ctx.fill();
-
-            // Incenter nuqtasi
-            ctx.beginPath();
-            ctx.arc(incenterX, incenterY, 6, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(34, 211, 238, 0.4)';
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.arc(incenterX, incenterY, 4, 0, Math.PI * 2);
-            ctx.fillStyle = '#22d3ee';
-            ctx.fill();
-
-            // Radius chizig'i (markazdan AB tomonga perpendikulyar)
-            const abDx = points[1].x - points[0].x;
-            const abDy = points[1].y - points[0].y;
-            const abLen = Math.sqrt(abDx * abDx + abDy * abDy);
-
-            // Perpendikulyar yo'nalish (AB tomonga)
-            let perpX = -abDy / abLen;
-            let perpY = abDx / abLen;
-
-            // Incenterdan AB tomonga perpendikulyar nuqtani topish
-            // Incenterdan AB chizig'iga proyeksiya
-            const t = ((incenterX - points[0].x) * abDx + (incenterY - points[0].y) * abDy) / (abLen * abLen);
-            const footX = points[0].x + t * abDx;
-            const footY = points[0].y + t * abDy;
-
-            // Radius chizig'i (incenterdan AB tomon ustidagi nuqtaga)
-            ctx.beginPath();
-            ctx.moveTo(incenterX, incenterY);
-            ctx.lineTo(footX, footY);
-            ctx.strokeStyle = '#22d3ee';
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([3, 3]);
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            // Radius label - radius chizig'iga perpendikulyar, tashqarida
-            const rMidX = (incenterX + footX) / 2;
-            const rMidY = (incenterY + footY) / 2;
-
-            // Radius chizig'iga perpendikulyar yo'nalish
-            const rDx = footX - incenterX;
-            const rDy = footY - incenterY;
-            const rLen = Math.sqrt(rDx * rDx + rDy * rDy);
-
-            if (rLen > 1) {
-                let rOffsetX = -rDy / rLen * 18;
-                let rOffsetY = rDx / rLen * 18;
-
-                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
-                const testX = rMidX + rOffsetX;
-                const testY = rMidY + rOffsetY;
-                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
-                const distFromMid = Math.sqrt((rMidX - centroidX) ** 2 + (rMidY - centroidY) ** 2);
-
-                if (distToCentroid < distFromMid) {
-                    rOffsetX = -rOffsetX;
-                    rOffsetY = -rOffsetY;
-                }
-
-                const rLabelX = rMidX + rOffsetX;
-                const rLabelY = rMidY + rOffsetY;
-
-                ctx.font = 'bold 11px Inter, sans-serif';
-                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-                ctx.beginPath();
-                ctx.roundRect(rLabelX - 10, rLabelY - 10, 20, 20, 4);
-                ctx.fill();
-                ctx.strokeStyle = '#22d3ee';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                ctx.fillStyle = '#22d3ee';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('r', rLabelX, rLabelY);
-            }
-
-            // Incenter label (agar bissektrisa ko'rsatilmagan bo'lsa)
-            if (!showBisector) {
-                ctx.font = 'bold 11px Inter, sans-serif';
-                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-                ctx.beginPath();
-                ctx.roundRect(incenterX + 10, incenterY - 18, 18, 20, 4);
-                ctx.fill();
-                ctx.strokeStyle = '#22d3ee';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                ctx.fillStyle = '#22d3ee';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('I', incenterX + 19, incenterY - 8);
-            }
-        }
-
-        // Tashqi aylana (Circumcircle)
-        if (showCircumcircle) {
-            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
-            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
-            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
-
-            // Circumcenter - uchburchak cho'qqilaridan teng masofada bo'lgan nuqta
-            // Circumcenter formulasi
-            const ax = points[0].x, ay = points[0].y;
-            const bx = points[1].x, by = points[1].y;
-            const cx = points[2].x, cy = points[2].y;
-
-            const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-
-            if (Math.abs(d) > 0.0001) {
-                const circumcenterX = ((ax * ax + ay * ay) * (by - cy) +
-                    (bx * bx + by * by) * (cy - ay) +
-                    (cx * cx + cy * cy) * (ay - by)) / d;
-                const circumcenterY = ((ax * ax + ay * ay) * (cx - bx) +
-                    (bx * bx + by * by) * (ax - cx) +
-                    (cx * cx + cy * cy) * (bx - ax)) / d;
-
-                // Circumradius - markazdan cho'qqigacha masofa
-                const circumradiusScaled = Math.sqrt(
-                    Math.pow(circumcenterX - ax, 2) +
-                    Math.pow(circumcenterY - ay, 2)
-                );
-
-                // Tashqi aylana chizish
-                ctx.beginPath();
-                ctx.arc(circumcenterX, circumcenterY, circumradiusScaled, 0, Math.PI * 2);
-                ctx.strokeStyle = '#a855f7';
-                ctx.lineWidth = 2.5;
-                ctx.setLineDash([]);
-                ctx.stroke();
-
-                // Aylana ichki gradient (yengil)
-                const circumGradient = ctx.createRadialGradient(
-                    circumcenterX, circumcenterY, circumradiusScaled * 0.7,
-                    circumcenterX, circumcenterY, circumradiusScaled
-                );
-                circumGradient.addColorStop(0, 'rgba(168, 85, 247, 0)');
-                circumGradient.addColorStop(1, 'rgba(168, 85, 247, 0.08)');
-                ctx.fillStyle = circumGradient;
-                ctx.fill();
-
-                // Circumcenter nuqtasi
-                ctx.beginPath();
-                ctx.arc(circumcenterX, circumcenterY, 6, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(168, 85, 247, 0.4)';
-                ctx.fill();
-
-                ctx.beginPath();
-                ctx.arc(circumcenterX, circumcenterY, 4, 0, Math.PI * 2);
-                ctx.fillStyle = '#a855f7';
-                ctx.fill();
-
-                // Radius chizig'i (markazdan A cho'qqisiga)
-                ctx.beginPath();
-                ctx.moveTo(circumcenterX, circumcenterY);
-                ctx.lineTo(ax, ay);
-                ctx.strokeStyle = '#a855f7';
-                ctx.lineWidth = 1.5;
-                ctx.setLineDash([3, 3]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-
-                // Radius label
-                const rLabelMidX = (circumcenterX + ax) / 2;
-                const rLabelMidY = (circumcenterY + ay) / 2;
-
-                // Radius chizig'iga perpendikulyar yo'nalish
-                const rdx = ax - circumcenterX;
-                const rdy = ay - circumcenterY;
-                const rLen = Math.sqrt(rdx * rdx + rdy * rdy);
-
-                if (rLen > 1) {
-                    let rOffsetX = -rdy / rLen * 18;
-                    let rOffsetY = rdx / rLen * 18;
-
-                    // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
-                    const testX = rLabelMidX + rOffsetX;
-                    const testY = rLabelMidY + rOffsetY;
-                    const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
-                    const distFromMid = Math.sqrt((rLabelMidX - centroidX) ** 2 + (rLabelMidY - centroidY) ** 2);
-
-                    if (distToCentroid < distFromMid) {
-                        rOffsetX = -rOffsetX;
-                        rOffsetY = -rOffsetY;
-                    }
-
-                    const rLabelX = rLabelMidX + rOffsetX;
-                    const rLabelY = rLabelMidY + rOffsetY;
-
-                    ctx.font = 'bold 11px Inter, sans-serif';
-                    ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-                    ctx.beginPath();
-                    ctx.roundRect(rLabelX - 12, rLabelY - 10, 24, 20, 4);
-                    ctx.fill();
-                    ctx.strokeStyle = '#a855f7';
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-
-                    ctx.fillStyle = '#a855f7';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('R', rLabelX, rLabelY);
-                }
-
-                // Circumcenter label - centroiddan teskari yo'nalishda
-                let oOffsetX = 15;
-                let oOffsetY = 15;
-
-                // Circumcenterdan centroidga yo'nalish
-                const toCentroidX = centroidX - circumcenterX;
-                const toCentroidY = centroidY - circumcenterY;
-                const toCentroidLen = Math.sqrt(toCentroidX * toCentroidX + toCentroidY * toCentroidY);
-
-                if (toCentroidLen > 1) {
-                    // Centroiddan teskari yo'nalishda label qo'yish
-                    oOffsetX = -toCentroidX / toCentroidLen * 20;
-                    oOffsetY = -toCentroidY / toCentroidLen * 20;
-                }
-
-                ctx.font = 'bold 11px Inter, sans-serif';
-                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-                ctx.beginPath();
-                ctx.roundRect(circumcenterX + oOffsetX - 10, circumcenterY + oOffsetY - 10, 20, 20, 4);
-                ctx.fill();
-                ctx.strokeStyle = '#a855f7';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                ctx.fillStyle = '#a855f7';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('O', circumcenterX + oOffsetX, circumcenterY + oOffsetY);
-            }
-        }
-
-        // Gipotenuza (to'g'ri burchakli uchburchak uchun)
-        if (showHypotenuse) {
-            // Uchburchak markazini hisoblash (centroid) - label joylashuvi uchun
-            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
-            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
-
-            // To'g'ri burchak bor-yo'qligini tekshirish
-            const isRightA = Math.abs(angleA - 90) < 1;
-            const isRightB = Math.abs(angleB - 90) < 1;
-            const isRightC = Math.abs(angleC - 90) < 1;
-            const isRightTriangle = isRightA || isRightB || isRightC;
-
-            if (isRightTriangle) {
-                // Gipotenuza - to'g'ri burchakka qarama-qarshi tomon (eng uzun tomon)
-                let hypPoints, hypLabel, leg1, leg2, rightAnglePoint;
-
-                if (isRightA) {
-                    // A = 90°, gipotenuza = a (B va C orasida)
-                    hypPoints = [points[1], points[2]];
-                    hypLabel = 'a';
-                    leg1 = 'b';
-                    leg2 = 'c';
-                    rightAnglePoint = points[0];
-                } else if (isRightB) {
-                    // B = 90°, gipotenuza = b (A va C orasida)
-                    hypPoints = [points[0], points[2]];
-                    hypLabel = 'b';
-                    leg1 = 'a';
-                    leg2 = 'c';
-                    rightAnglePoint = points[1];
-                } else {
-                    // C = 90°, gipotenuza = c (A va B orasida)
-                    hypPoints = [points[0], points[1]];
-                    hypLabel = 'c';
-                    leg1 = 'a';
-                    leg2 = 'b';
-                    rightAnglePoint = points[2];
-                }
-
-                // Gipotenuza chizig'ini ajratib ko'rsatish
-                ctx.beginPath();
-                ctx.moveTo(hypPoints[0].x, hypPoints[0].y);
-                ctx.lineTo(hypPoints[1].x, hypPoints[1].y);
-                ctx.strokeStyle = '#f43f5e';
-                ctx.lineWidth = 5;
-                ctx.lineCap = 'round';
-                ctx.stroke();
-
-                // Gipotenuza ustida yaltiroq effekt
-                ctx.beginPath();
-                ctx.moveTo(hypPoints[0].x, hypPoints[0].y);
-                ctx.lineTo(hypPoints[1].x, hypPoints[1].y);
-                ctx.strokeStyle = 'rgba(244, 63, 94, 0.3)';
-                ctx.lineWidth = 12;
-                ctx.stroke();
-
-                // To'g'ri burchak belgisi (90° uchun kvadrat)
-                const sqSize = 15;
-                const prev = hypPoints[0];
-                const next = hypPoints[1];
-
-                // Ikki tomon yo'nalishlari
-                const dir1x = (prev.x - rightAnglePoint.x);
-                const dir1y = (prev.y - rightAnglePoint.y);
-                const len1 = Math.sqrt(dir1x * dir1x + dir1y * dir1y);
-                const norm1x = dir1x / len1 * sqSize;
-                const norm1y = dir1y / len1 * sqSize;
-
-                const dir2x = (next.x - rightAnglePoint.x);
-                const dir2y = (next.y - rightAnglePoint.y);
-                const len2 = Math.sqrt(dir2x * dir2x + dir2y * dir2y);
-                const norm2x = dir2x / len2 * sqSize;
-                const norm2y = dir2y / len2 * sqSize;
-
-                ctx.beginPath();
-                ctx.moveTo(rightAnglePoint.x + norm1x, rightAnglePoint.y + norm1y);
-                ctx.lineTo(rightAnglePoint.x + norm1x + norm2x, rightAnglePoint.y + norm1y + norm2y);
-                ctx.lineTo(rightAnglePoint.x + norm2x, rightAnglePoint.y + norm2y);
-                ctx.strokeStyle = '#f43f5e';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // Pifagor teoremasi labeli
-                const midX = (hypPoints[0].x + hypPoints[1].x) / 2;
-                const midY = (hypPoints[0].y + hypPoints[1].y) / 2;
-
-                const dx = hypPoints[1].x - hypPoints[0].x;
-                const dy = hypPoints[1].y - hypPoints[0].y;
-                const len = Math.sqrt(dx * dx + dy * dy);
-                let offsetX = -dy / len * 35;
-                let offsetY = dx / len * 35;
-
-                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalish
-                const testX = midX + offsetX;
-                const testY = midY + offsetY;
-                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
-                const distFromMid = Math.sqrt((midX - centroidX) ** 2 + (midY - centroidY) ** 2);
-
-                if (distToCentroid < distFromMid) {
-                    offsetX = -offsetX;
-                    offsetY = -offsetY;
-                }
-
-                const pythagorasText = `${hypLabel}² = ${leg1}² + ${leg2}²`;
-                ctx.font = 'bold 12px Inter, sans-serif';
-                const textWidth = ctx.measureText(pythagorasText).width + 16;
-
-                ctx.fillStyle = 'rgba(244, 63, 94, 0.15)';
-                ctx.beginPath();
-                ctx.roundRect(midX + offsetX - textWidth / 2, midY + offsetY - 14, textWidth, 28, 6);
-                ctx.fill();
-                ctx.strokeStyle = '#f43f5e';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                ctx.fillStyle = '#f43f5e';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(pythagorasText, midX + offsetX, midY + offsetY);
-            } else {
-                // To'g'ri burchakli emas - ogohlantirish
-                ctx.font = 'bold 12px Inter, sans-serif';
-                ctx.fillStyle = 'rgba(244, 63, 94, 0.2)';
-                ctx.beginPath();
-                ctx.roundRect(20, 20, 200, 30, 6);
-                ctx.fill();
-                ctx.strokeStyle = '#f43f5e';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                ctx.fillStyle = '#f43f5e';
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('⚠ To\'g\'ri burchakli emas!', 30, 35);
-            }
-        }
+        // Cho'qqi yozuvlari (A, B, C) joylashuvini oldindan band qilamiz —
+        // boshqa yozuvlar ular ustiga chiqmasligi uchun
+        const vertexSeedRects = points.map((point, i) => {
+            let lx = point.x, ly = point.y;
+            if (i === 0) { lx -= 25; ly += 5; }
+            else if (i === 1) { lx += 25; ly += 5; }
+            else { ly -= 25; }
+            return { x: lx - 14, y: ly - 14, w: 28, h: 28 };
+        });
+
+        // Barcha ko'rinish elementlarini chizish (umumiy funksiya, animatsiya bilan)
+        drawTriangleFeatures(ctx, points, { a, b, c, angleA, angleB, angleC, anim: animProgress, seedRects: vertexSeedRects });
 
         // Nuqtalar
         points.forEach((point, i) => {
@@ -1604,64 +2000,8 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
             ctx.fillText(point.label, lx, ly);
         });
 
-        // Tomonlar uzunligi
-        if (showSides) {
-            // Uchburchak markazini hisoblash (centroid)
-            const centroidX = (points[0].x + points[1].x + points[2].x) / 3;
-            const centroidY = (points[0].y + points[1].y + points[2].y) / 3;
 
-            const sides = [
-                { p1: 1, p2: 2, label: `a = ${a}`, color: '#ef4444' },
-                { p1: 0, p2: 2, label: `b = ${b}`, color: '#f59e0b' },
-                { p1: 0, p2: 1, label: `c = ${c}`, color: '#10b981' }
-            ];
-
-            sides.forEach(side => {
-                const midX = (points[side.p1].x + points[side.p2].x) / 2;
-                const midY = (points[side.p1].y + points[side.p2].y) / 2;
-
-                // Offset perpendicular to the side
-                const dx = points[side.p2].x - points[side.p1].x;
-                const dy = points[side.p2].y - points[side.p1].y;
-                const len = Math.sqrt(dx * dx + dy * dy);
-                let nx = -dy / len * 25;
-                let ny = dx / len * 25;
-
-                // Offset yo'nalishini tekshirish - centroidga qarab bo'lsa, teskari yo'nalishga o'zgartirish
-                // Bu orqali label har doim uchburchak tashqarisida bo'ladi
-                const testX = midX + nx;
-                const testY = midY + ny;
-                const distToCentroid = Math.sqrt((testX - centroidX) ** 2 + (testY - centroidY) ** 2);
-                const distFromMid = Math.sqrt((midX - centroidX) ** 2 + (midY - centroidY) ** 2);
-
-                // Agar offset centroidga yaqinroq bo'lsa, teskari yo'nalishga o'zgartirish
-                if (distToCentroid < distFromMid) {
-                    nx = -nx;
-                    ny = -ny;
-                }
-
-                const tx = midX + nx;
-                const ty = midY + ny;
-
-                // Background
-                ctx.fillStyle = 'rgba(23, 23, 31, 0.9)';
-                ctx.font = 'bold 12px Inter, sans-serif';
-                const textWidth = ctx.measureText(side.label).width + 16;
-                ctx.beginPath();
-                ctx.roundRect(tx - textWidth / 2, ty - 12, textWidth, 24, 6);
-                ctx.fill();
-                ctx.strokeStyle = side.color;
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                ctx.fillStyle = side.color;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(side.label, tx, ty);
-            });
-        }
-
-    }, [a, b, c, angleA, angleB, angleC, showGrid, showAngles, showSides, showHeight, showExternalAngles, showMedian, showBisector, showIncircle, showCircumcircle, showHypotenuse, isValid, canvasSize]);
+    }, [a, b, c, angleA, angleB, angleC, showGrid, showAngles, showSides, showHeight, showExternalAngles, showMedian, showBisector, showIncircle, showCircumcircle, showHypotenuse, isValid, canvasSize, animProgress]);
 
     return (
         <canvas
@@ -2945,6 +3285,39 @@ export function UchburchakPage() {
                         setSideA(Math.max(0.5, Math.min(50, newA)));
                         setSideB(Math.max(0.5, Math.min(50, newB)));
                         setSideC(Math.max(0.5, Math.min(50, newC)));
+                    }}
+                    viewFlags={{
+                        grid: showGrid,
+                        angles: showAngles,
+                        sides: showSides,
+                        height: showHeight,
+                        external: showExternalAngles,
+                        median: showMedian,
+                        bisector: showBisector,
+                        incircle: showIncircle,
+                        circumcircle: showCircumcircle,
+                        hypotenuse: showHypotenuse
+                    }}
+                    onToggleView={(key) => {
+                        const setters = {
+                            grid: setShowGrid,
+                            angles: setShowAngles,
+                            sides: setShowSides,
+                            height: setShowHeight,
+                            external: setShowExternalAngles,
+                            median: setShowMedian,
+                            bisector: setShowBisector,
+                            incircle: setShowIncircle,
+                            circumcircle: setShowCircumcircle,
+                            hypotenuse: setShowHypotenuse
+                        };
+                        setters[key](v => !v);
+                    }}
+                    onClearView={() => {
+                        [setShowGrid, setShowAngles, setShowSides, setShowHeight,
+                            setShowExternalAngles, setShowMedian, setShowBisector,
+                            setShowIncircle, setShowCircumcircle, setShowHypotenuse
+                        ].forEach(set => set(false));
                     }}
                 />
             )}
