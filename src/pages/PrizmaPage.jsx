@@ -395,6 +395,13 @@ export function PrizmaPage() {
 
     // Hisob-kitoblar modali
     const [showCalcModal, setShowCalcModal] = useState(false);
+    const [calcModalClosing, setCalcModalClosing] = useState(false);
+    // Modalni yopilish animatsiyasi bilan yopadi (260ms exit, keyin unmount)
+    const closeCalcModal = () => {
+        if (calcModalClosing) return;
+        setCalcModalClosing(true);
+        setTimeout(() => { setCalcModalClosing(false); setShowCalcModal(false); }, 260);
+    };
     const [selectedCalc, setSelectedCalc] = useState(null);
 
     // Fullscreen
@@ -1197,9 +1204,9 @@ export function PrizmaPage() {
 
             {/* Hisob-kitoblar Modal */}
             {showCalcModal && selectedCalc && (
-                <div className="calc-modal-overlay" onClick={() => setShowCalcModal(false)}>
-                    <div className="calc-modal" onClick={(e) => e.stopPropagation()}>
-                        <button className="calc-modal-close" onClick={() => setShowCalcModal(false)}>
+                <div className={`calc-modal-overlay${calcModalClosing ? ' closing' : ''}`} onClick={closeCalcModal}>
+                    <div className={`calc-modal${calcModalClosing ? ' closing' : ''}`} onClick={(e) => e.stopPropagation()}>
+                        <button className="calc-modal-close" onClick={closeCalcModal}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M18 6L6 18M6 6l12 12" />
                             </svg>

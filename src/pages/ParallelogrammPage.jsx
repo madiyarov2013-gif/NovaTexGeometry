@@ -845,6 +845,13 @@ export function ParallelogrammPage() {
     const [showCenter, setShowCenter] = useState(false);
     const [showSymmetry, setShowSymmetry] = useState(false);
     const [resultModal, setResultModal] = useState(null);
+    const [modalClosing, setModalClosing] = useState(false);
+    // Modalni yopilish animatsiyasi bilan yopadi (260ms exit, keyin unmount)
+    const closeResultModal = () => {
+        if (modalClosing) return;
+        setModalClosing(true);
+        setTimeout(() => { setModalClosing(false); setResultModal(null); }, 260);
+    };
     const [showRulesModal, setShowRulesModal] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -1266,9 +1273,21 @@ export function ParallelogrammPage() {
             </div>
 
             {resultModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }} onClick={() => setResultModal(null)}>
-                    <div style={{ backgroundColor: '#1e1e24', padding: '30px', borderRadius: '20px', maxWidth: '600px', width: '90%', border: '1px solid #2a2a35', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', position: 'relative' }} onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setResultModal(null)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: '#9ca3af', fontSize: '24px', cursor: 'pointer' }}>×</button>
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)', animation: modalClosing ? 'ntgModalOverlayOut 0.26s ease-in forwards' : 'ntgModalOverlayIn 0.22s ease-out' }} onClick={closeResultModal}>
+                    <style>{`
+                        @keyframes ntgModalOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+                        @keyframes ntgModalOverlayOut { from { opacity: 1; } to { opacity: 0; } }
+                        @keyframes ntgModalPopIn {
+                            from { opacity: 0; transform: translateY(18px) scale(0.9); }
+                            to { opacity: 1; transform: translateY(0) scale(1); }
+                        }
+                        @keyframes ntgModalPopOut {
+                            from { opacity: 1; transform: translateY(0) scale(1); }
+                            to { opacity: 0; transform: translateY(18px) scale(0.9); }
+                        }
+                    `}</style>
+                    <div style={{ backgroundColor: '#1e1e24', padding: '30px', borderRadius: '20px', maxWidth: '600px', width: '90%', border: '1px solid #2a2a35', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', position: 'relative', animation: modalClosing ? 'ntgModalPopOut 0.26s cubic-bezier(0.4, 0, 1, 1) forwards' : 'ntgModalPopIn 0.34s cubic-bezier(0.16, 1, 0.3, 1)' }} onClick={e => e.stopPropagation()}>
+                        <button onClick={closeResultModal} style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: '#9ca3af', fontSize: '24px', cursor: 'pointer' }}>×</button>
                         {resultModal === 'area' && (
                             <div>
                                 <h3 style={{ fontSize: '24px', marginBottom: '20px', color: '#ec4899' }}>📐 Yuzasini hisoblash</h3>

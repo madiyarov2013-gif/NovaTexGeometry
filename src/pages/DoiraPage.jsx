@@ -701,6 +701,13 @@ export function DoiraPage() {
     const [showChord, setShowChord] = useState(false);
     const [showFullscreen, setShowFullscreen] = useState(false);
     const [showResultsModal, setShowResultsModal] = useState(false);
+    const [resultsClosing, setResultsClosing] = useState(false);
+    // Natija modalini yopilish animatsiyasi bilan yopadi (260ms exit, keyin unmount)
+    const closeResultsModal = () => {
+        if (resultsClosing) return;
+        setResultsClosing(true);
+        setTimeout(() => { setResultsClosing(false); setShowResultsModal(false); }, 260);
+    };
     const [showRulesModal, setShowRulesModal] = useState(false);
     const [selectedResult, setSelectedResult] = useState(null);
 
@@ -1165,9 +1172,9 @@ export function DoiraPage() {
 
             {/* Results Modal */}
             {showResultsModal && selectedResult && (
-                <div className="modal-overlay" onClick={() => setShowResultsModal(false)}>
-                    <div className="modal-content pro-modal" onClick={(e) => e.stopPropagation()}>
-                        <button className="modal-close" onClick={() => setShowResultsModal(false)}>×</button>
+                <div className={`modal-overlay${resultsClosing ? ' closing' : ''}`} onClick={closeResultsModal}>
+                    <div className={`modal-content pro-modal${resultsClosing ? ' closing' : ''}`} onClick={(e) => e.stopPropagation()}>
+                        <button className="modal-close" onClick={closeResultsModal}>×</button>
                         <div className="modal-header">
                             <span className="modal-icon">{selectedResult.icon}</span>
                             <h2>{selectedResult.title}</h2>

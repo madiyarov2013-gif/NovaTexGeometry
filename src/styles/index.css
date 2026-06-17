@@ -1648,6 +1648,31 @@ a {
   }
 }
 
+/* ====== MODAL YOPILISH (CLOSE) ANIMATSIYALARI ======
+   Klass-asosidagi modallar uchun (.calc-modal — 3D sahifalar,
+   .modal-content — Doira). Yopishda JSX 'closing' klassini qo'shadi,
+   exit animatsiyasi tugagach React unmount qiladi. Noyob keyframe
+   nomlari (mavjud modalSlideIn bilan to'qnashmaslik uchun). */
+@keyframes ntgFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes ntgModalSlideOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(30px) scale(0.92); }
+}
+
+.calc-modal-overlay.closing,
+.modal-overlay.closing {
+  animation: ntgFadeOut 0.26s ease forwards;
+}
+
+.calc-modal.closing,
+.modal-content.closing {
+  animation: ntgModalSlideOut 0.26s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 .calc-modal-close {
   position: absolute;
   top: var(--spacing-md);

@@ -814,6 +814,13 @@ export function KvadratPage() {
     const [showIncircle, setShowIncircle] = useState(false);
     const [showCircumcircle, setShowCircumcircle] = useState(false);
     const [resultModal, setResultModal] = useState(null);
+    const [modalClosing, setModalClosing] = useState(false);
+    // Modalni yopilish animatsiyasi bilan yopadi (260ms exit, keyin unmount)
+    const closeResultModal = () => {
+        if (modalClosing) return;
+        setModalClosing(true);
+        setTimeout(() => { setModalClosing(false); setResultModal(null); }, 260);
+    };
     const [showRulesModal, setShowRulesModal] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -1231,8 +1238,21 @@ export function KvadratPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backdropFilter: 'blur(5px)'
-                }} onClick={() => setResultModal(null)}>
+                    backdropFilter: 'blur(5px)',
+                    animation: modalClosing ? 'ntgModalOverlayOut 0.26s ease-in forwards' : 'ntgModalOverlayIn 0.22s ease-out'
+                }} onClick={closeResultModal}>
+                    <style>{`
+                        @keyframes ntgModalOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+                        @keyframes ntgModalOverlayOut { from { opacity: 1; } to { opacity: 0; } }
+                        @keyframes ntgModalPopIn {
+                            from { opacity: 0; transform: translateY(18px) scale(0.9); }
+                            to { opacity: 1; transform: translateY(0) scale(1); }
+                        }
+                        @keyframes ntgModalPopOut {
+                            from { opacity: 1; transform: translateY(0) scale(1); }
+                            to { opacity: 0; transform: translateY(18px) scale(0.9); }
+                        }
+                    `}</style>
                     <div style={{
                         backgroundColor: '#1e1e24',
                         padding: '30px',
@@ -1241,10 +1261,11 @@ export function KvadratPage() {
                         width: '90%',
                         border: '1px solid #2a2a35',
                         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                        position: 'relative'
+                        position: 'relative',
+                        animation: modalClosing ? 'ntgModalPopOut 0.26s cubic-bezier(0.4, 0, 1, 1) forwards' : 'ntgModalPopIn 0.34s cubic-bezier(0.16, 1, 0.3, 1)'
                     }} onClick={e => e.stopPropagation()}>
                         <button
-                            onClick={() => setResultModal(null)}
+                            onClick={closeResultModal}
                             style={{
                                 position: 'absolute',
                                 top: '15px',
