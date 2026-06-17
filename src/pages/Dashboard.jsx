@@ -1,10 +1,41 @@
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { UserMenu } from '../components/UserMenu';
 import { HoverText } from '../components/HoverText';
 
 export function Dashboard() {
+    const revealRootRef = useRef(null);
+
+    useEffect(() => {
+        const root = revealRootRef.current;
+        if (!root) return;
+
+        const targets = root.querySelectorAll('.reveal');
+        if (!targets.length) return;
+
+        if (typeof IntersectionObserver === 'undefined') {
+            targets.forEach((el) => el.classList.add('in-view'));
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('in-view');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            },
+            { threshold: 0.15, rootMargin: '0px 0px -60px 0px' }
+        );
+
+        targets.forEach((el) => observer.observe(el));
+        return () => observer.disconnect();
+    }, []);
+
     return (
-        <div className="dashboard">
+        <div className="dashboard" ref={revealRootRef}>
             {/* Top Navigation */}
             <nav className="dashboard-nav">
                 <div className="nav-logo">
@@ -17,7 +48,7 @@ export function Dashboard() {
             </nav>
 
             {/* Hero Section */}
-            <section className="hero">
+            <section className="hero reveal reveal-up">
                 <div className="hero-content">
                     <div className="hero-hovertext-wrapper">
                         <HoverText
@@ -57,11 +88,11 @@ export function Dashboard() {
             </section>
 
             {/* Category Selection */}
-            <section className="categories">
+            <section className="categories reveal reveal-up">
                 <h2>Bo'limni tanlang</h2>
                 <div className="category-cards">
                     {/* 2D Models Card */}
-                    <Link to="/2d-models" className="category-card card-2d">
+                    <Link to="/2d-models" className="category-card card-2d reveal reveal-up reveal-delay-1">
                         <div className="card-icon">
                             <svg className="custom-glass-icon" viewBox="0 0 100 100" width="70" height="70" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.4))' }}>
                                 <defs>
@@ -116,7 +147,7 @@ export function Dashboard() {
                     </Link>
 
                     {/* 3D Models Card */}
-                    <Link to="/3d-models" className="category-card card-3d">
+                    <Link to="/3d-models" className="category-card card-3d reveal reveal-up reveal-delay-2">
                         <div className="card-icon">
                             <svg className="custom-3d-wireframe" viewBox="0 0 100 100" width="70" height="70" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.4))', overflow: 'visible' }}>
                                 <defs>
@@ -199,25 +230,25 @@ export function Dashboard() {
             </section>
 
             {/* Features */}
-            <section className="features">
+            <section className="features reveal reveal-up">
                 <h2>Platforma xususiyatlari</h2>
                 <div className="feature-grid">
-                    <div className="feature-item">
+                    <div className="feature-item reveal reveal-up reveal-delay-1">
                         <div className="feature-icon">🎮</div>
                         <h4>Interaktiv 3D</h4>
                         <p>Modellarni aylantiring, yaqinlashtiring</p>
                     </div>
-                    <div className="feature-item">
+                    <div className="feature-item reveal reveal-up reveal-delay-2">
                         <div className="feature-icon">📏</div>
                         <h4>Aniq o'lchovlar</h4>
                         <p>mm, sm, m - istalgan birlik</p>
                     </div>
-                    <div className="feature-item">
+                    <div className="feature-item reveal reveal-up reveal-delay-3">
                         <div className="feature-icon">📐</div>
                         <h4>Burchak graduslar</h4>
                         <p>0° dan 180° gacha kiritish</p>
                     </div>
-                    <div className="feature-item">
+                    <div className="feature-item reveal reveal-up reveal-delay-4">
                         <div className="feature-icon">📊</div>
                         <h4>Formulalar</h4>
                         <p>Hajm, sirt maydoni - o'zbekcha</p>

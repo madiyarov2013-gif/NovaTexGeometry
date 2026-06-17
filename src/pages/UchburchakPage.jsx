@@ -1799,9 +1799,14 @@ function FullscreenTriangleWhiteboard({ sideA, sideB, sideC, unitSymbol, onClose
 }
 
 // Yaxshilangan Canvas komponenti
-function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles, showSides, showHeight, showExternalAngles, showMedian, showBisector, showIncircle, showCircumcircle, showHypotenuse, isValid }) {
+function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles, showSides, showHeight, showExternalAngles, showMedian, showBisector, showIncircle, showCircumcircle, showHypotenuse, isValid, onSizeChange, sideLimits }) {
     const canvasRef = useRef(null);
     const [canvasSize, setCanvasSize] = useState({ width: 700, height: 550 });
+    // Cho'qqini sichqoncha bilan tortib uchburchak o'lchamini o'zgartirish (fullscreen emas)
+    const [draggingVertex, setDraggingVertex] = useState(null);
+    const [hoverVertex, setHoverVertex] = useState(false);
+    // Drag paytidagi jonli holat (re-render kutmasdan, qotirilgan masshtab bilan)
+    const dragRef = useRef(null);
 
     // Ko'rinish elementlari animatsiyasi (umumiy hook)
     const animProgress = useFeatureAnimation({
@@ -1829,10 +1834,72 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
         return () => window.removeEventListener('resize', updateSize);
     }, []);
 
+    // Cho'qqi piksel koordinatalaridan tomon va burchaklarni hisoblash
+    const sidesFromPoints = (pts, scale) => {
+        const d = (m, n) => Math.sqrt((m.x - n.x) ** 2 + (m.y - n.y) ** 2) / scale;
+        const c2 = Math.round(d(pts[0], pts[1]) * 10) / 10; // AB
+        const b2 = Math.round(d(pts[0], pts[2]) * 10) / 10; // AC
+        const a2 = Math.round(d(pts[1], pts[2]) * 10) / 10; // BC
+        const toDeg = (v) => Math.acos(Math.max(-1, Math.min(1, v))) * 180 / Math.PI;
+        const angA = toDeg((b2 * b2 + c2 * c2 - a2 * a2) / (2 * b2 * c2));
+        const angB = toDeg((a2 * a2 + c2 * c2 - b2 * b2) / (2 * a2 * c2));
+        const angC = 180 - angA - angB;
+        return { a: a2, b: b2, c: c2, angleA: angA, angleB: angB, angleC: angC };
+    };
+
+    // Tomonlar bo'yicha markazlashtirilgan, ekranga moslashtirilgan cho'qqilar
+    const computeFitted = (sa, sb, sc, angA, angB, angC, w, h) => {
+        const centerX = w / 2;
+        const centerY = h / 2 + 40;
+        const maxSide = Math.max(sa, sb, sc);
+        const scale = Math.min(w * 0.7, h * 0.6) / maxSide;
+        const x1 = 0, y1 = 0;
+        const x2 = sc * scale, y2 = 0;
+        const aR = (angA * Math.PI) / 180;
+        const x3 = sb * scale * Math.cos(aR);
+        const y3 = -sb * scale * Math.sin(aR);
+        const minX = Math.min(x1, x2, x3), maxX = Math.max(x1, x2, x3);
+        const minY = Math.min(y1, y2, y3), maxY = Math.max(y1, y2, y3);
+        const offX = centerX - (minX + maxX) / 2;
+        const offY = centerY - (minY + maxY) / 2;
+        return {
+            scale, w, h,
+            points: [
+                { x: x1 + offX, y: y1 + offY, label: 'A', angle: angA },
+                { x: x2 + offX, y: y2 + offY, label: 'B', angle: angB },
+                { x: x3 + offX, y: y3 + offY, label: 'C', angle: angC }
+            ]
+        };
+    };
+
+    // Render manbasi — cho'qqilarning HAQIQIY piksel pozitsiyalari. Drag paytida
+    // faqat tortilgan cho'qqi siljiydi; qolganlari va masshtab joyida qoladi, shuning
+    // uchun na drag paytida, na qo'yib yuborilganda shakl sakramaydi. Faqat slayder
+    // o'zgarganda yoki canvas o'lchami o'zgarganda qayta markazlashtiriladi.
+    const [verts, setVerts] = useState(null);
+    const vertsRef = useRef(null);
+    vertsRef.current = verts;
+
     useEffect(() => {
+        if (!isValid) { setVerts(null); return; }
+        const cur = vertsRef.current;
+        // Hozirgi pozitsiyalar shu tomonlarni va shu canvas o'lchamini aks ettirsa —
+        // (ya'ni o'zgarish drag'dan kelgan bo'lsa) qayta moslashtirmaymiz.
+        if (cur && cur.w === canvasSize.width && cur.h === canvasSize.height) {
+            const s = sidesFromPoints(cur.points, cur.scale);
+            if (s.a === a && s.b === b && s.c === c) return;
+        }
+        setVerts(computeFitted(a, b, c, angleA, angleB, angleC, canvasSize.width, canvasSize.height));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [a, b, c, angleA, angleB, angleC, isValid, canvasSize]);
+
+    // Sahnani chizish — `points` (cho'qqilar) va `sides` (tomon/burchak qiymatlari)
+    // tashqaridan beriladi, shu sababli ham oddiy render, ham drag paytidagi jonli
+    // (imperativ) chizish bir xil koddan foydalanadi. Drag paytida masshtab qotirilgani
+    // uchun shakl sakramaydi — boshqa cho'qqilar joyida turadi.
+    const drawScene = (renderPoints, sides, highlightIdx = null) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-
         const ctx = canvas.getContext('2d');
         const width = canvasSize.width;
         const height = canvasSize.height;
@@ -1865,7 +1932,6 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
         }
 
         if (!isValid) {
-            // Xatolik xabari
             ctx.fillStyle = '#ef4444';
             ctx.font = 'bold 18px Inter, sans-serif';
             ctx.textAlign = 'center';
@@ -1876,37 +1942,9 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
             return;
         }
 
-        // Uchburchak chizish
-        const centerX = width / 2;
-        const centerY = height / 2 + 40;
-        const maxSide = Math.max(a, b, c);
-        const scale = Math.min(width * 0.7, height * 0.6) / maxSide;
-
-        // Nuqtalar
-        const x1 = 0;
-        const y1 = 0;
-        const x2 = c * scale;
-        const y2 = 0;
-
-        // C nuqta (A burchak va b tomon asosida)
-        const angleARad = (angleA * Math.PI) / 180;
-        const x3 = b * scale * Math.cos(angleARad);
-        const y3 = -b * scale * Math.sin(angleARad);
-
-        // Markazlashtirish
-        const minX = Math.min(x1, x2, x3);
-        const maxX = Math.max(x1, x2, x3);
-        const minY = Math.min(y1, y2, y3);
-        const maxY = Math.max(y1, y2, y3);
-
-        const offsetX = centerX - (minX + maxX) / 2;
-        const offsetY = centerY - (minY + maxY) / 2;
-
-        const points = [
-            { x: x1 + offsetX, y: y1 + offsetY, label: 'A', angle: angleA },
-            { x: x2 + offsetX, y: y2 + offsetY, label: 'B', angle: angleB },
-            { x: x3 + offsetX, y: y3 + offsetY, label: 'C', angle: angleC }
-        ];
+        if (!renderPoints) return;
+        const points = renderPoints;
+        const sA = sides.a, sB = sides.b, sC = sides.c;
 
         // Shadow
         ctx.shadowColor = 'rgba(16, 185, 129, 0.3)';
@@ -1942,8 +1980,7 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
         ctx.lineJoin = 'round';
         ctx.stroke();
 
-        // Cho'qqi yozuvlari (A, B, C) joylashuvini oldindan band qilamiz —
-        // boshqa yozuvlar ular ustiga chiqmasligi uchun
+        // Cho'qqi yozuvlari (A, B, C) joylashuvini oldindan band qilamiz
         const vertexSeedRects = points.map((point, i) => {
             let lx = point.x, ly = point.y;
             if (i === 0) { lx -= 25; ly += 5; }
@@ -1953,19 +1990,20 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
         });
 
         // Barcha ko'rinish elementlarini chizish (umumiy funksiya, animatsiya bilan)
-        drawTriangleFeatures(ctx, points, { a, b, c, angleA, angleB, angleC, anim: animProgress, seedRects: vertexSeedRects });
+        drawTriangleFeatures(ctx, points, { a: sA, b: sB, c: sC, angleA: sides.angleA, angleB: sides.angleB, angleC: sides.angleC, anim: animProgress, seedRects: vertexSeedRects });
 
         // Nuqtalar
         points.forEach((point, i) => {
-            // Outer glow
+            const active = i === highlightIdx;
+            // Outer glow — tortilayotgan cho'qqi kattaroq va yorqinroq
             ctx.beginPath();
-            ctx.arc(point.x, point.y, 12, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(16, 185, 129, 0.3)';
+            ctx.arc(point.x, point.y, active ? 18 : 12, 0, Math.PI * 2);
+            ctx.fillStyle = active ? 'rgba(16, 185, 129, 0.55)' : 'rgba(16, 185, 129, 0.3)';
             ctx.fill();
 
             // Inner circle
             ctx.beginPath();
-            ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
+            ctx.arc(point.x, point.y, active ? 9 : 7, 0, Math.PI * 2);
             ctx.fillStyle = COLORS.primary;
             ctx.fill();
 
@@ -1999,9 +2037,111 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
             ctx.textBaseline = 'middle';
             ctx.fillText(point.label, lx, ly);
         });
+    };
 
+    useEffect(() => {
+        // Drag davom etayotgan bo'lsa qotirilgan (jonli) cho'qqilardan, aks holda
+        // saqlangan pozitsiyalardan (verts) chizamiz.
+        const drag = dragRef.current;
+        if (drag) {
+            drawScene(drag.points, drag.sides, drag.idx);
+        } else {
+            drawScene(verts?.points, { a, b, c, angleA, angleB, angleC });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [a, b, c, angleA, angleB, angleC, showGrid, showAngles, showSides, showHeight, showExternalAngles, showMedian, showBisector, showIncircle, showCircumcircle, showHypotenuse, isValid, canvasSize, animProgress, verts]);
 
-    }, [a, b, c, angleA, angleB, angleC, showGrid, showAngles, showSides, showHeight, showExternalAngles, showMedian, showBisector, showIncircle, showCircumcircle, showHypotenuse, isValid, canvasSize, animProgress]);
+    // Sichqoncha koordinatasini canvas piksel koordinatasiga o'tkazish
+    // (canvas CSS bilan cho'zilishi mumkin, shuning uchun masshtabni hisobga olamiz)
+    const getCanvasCoords = (e) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        const src = e.touches?.length > 0 ? e.touches[0] : e;
+        const sx = canvas.width / rect.width;
+        const sy = canvas.height / rect.height;
+        return { x: (src.clientX - rect.left) * sx, y: (src.clientY - rect.top) * sy };
+    };
+
+    const findVertexAt = (coords) => {
+        const v = vertsRef.current;
+        if (!v) return -1;
+        const hitRadius = 24;
+        return v.points.findIndex(p =>
+            Math.sqrt((p.x - coords.x) ** 2 + (p.y - coords.y) ** 2) <= hitRadius
+        );
+    };
+
+    const handleMouseDown = (e) => {
+        if (!onSizeChange) return;
+        const v = vertsRef.current;
+        if (!v) return;
+        const idx = findVertexAt(getCanvasCoords(e));
+        if (idx === -1) return;
+        // Drag boshlandi: masshtab va boshqa cho'qqilar qotiriladi — shu sababli
+        // tortilganda shakl sakramaydi (faqat tanlangan cho'qqi kursorga ergashadi).
+        const base = v.points.map(p => ({ ...p }));
+        dragRef.current = {
+            idx,
+            scale: v.scale,
+            base,
+            points: base.map(p => ({ ...p })),
+            sides: { a, b, c, angleA, angleB, angleC }
+        };
+        setDraggingVertex(idx);
+    };
+
+    const handleMouseMove = (e) => {
+        if (!vertsRef.current) return;
+        const coords = getCanvasCoords(e);
+        const drag = dragRef.current;
+
+        if (!drag) {
+            // Drag yo'q — faqat kursor ko'rinishi uchun hover tekshiruvi
+            if (onSizeChange) setHoverVertex(findVertexAt(coords) !== -1);
+            return;
+        }
+
+        // Tanlangan cho'qqi kursorga ergashadi, qolgan ikkitasi joyida qoladi
+        const pts = drag.base.map(p => ({ ...p }));
+        pts[drag.idx] = { ...pts[drag.idx], x: coords.x, y: coords.y };
+        const sides = sidesFromPoints(pts, drag.scale);
+
+        // Chegaradan tashqarida (juda kichik/katta) — kadrni qotiramiz, sakrash bo'lmaydi
+        const lim = sideLimits || { min: 0.5, max: 100000 };
+        if ([sides.a, sides.b, sides.c].some(v => v < lim.min || v > lim.max)) return;
+
+        // Cho'qqi yozuvlari uchun burchaklarni yangilaymiz
+        pts[0].angle = sides.angleA; pts[0].label = 'A';
+        pts[1].angle = sides.angleB; pts[1].label = 'B';
+        pts[2].angle = sides.angleC; pts[2].label = 'C';
+
+        drag.points = pts;
+        drag.sides = sides;
+
+        // Darhol imperativ chizish — kursordan ortda qolmaslik (silliq, "pro" his)
+        drawScene(pts, sides, drag.idx);
+        // Saqlangan pozitsiyani ham yangilaymiz: shunda qo'yib yuborilganda shakl
+        // o'sha joyida qoladi (qayta markazlashtirish/sakrash bo'lmaydi).
+        setVerts({ scale: drag.scale, w: canvasSize.width, h: canvasSize.height, points: pts });
+        // Panellarni yangilash
+        onSizeChange({ sideA: sides.a, sideB: sides.b, sideC: sides.c });
+    };
+
+    const handleMouseUp = () => {
+        if (!dragRef.current) return;
+        dragRef.current = null;
+        setHoverVertex(false);
+        setDraggingVertex(null); // re-render → effect geometriyadan qayta chizadi
+    };
+
+    const handleTouchMove = (e) => {
+        if (dragRef.current) e.preventDefault();
+        handleMouseMove(e);
+    };
+
+    const interactive = !!onSizeChange;
+    const cursor = draggingVertex !== null ? 'grabbing' : (hoverVertex ? 'grab' : 'default');
 
     return (
         <canvas
@@ -2009,7 +2149,14 @@ function TriangleCanvas({ a, b, c, angleA, angleB, angleC, showGrid, showAngles,
             width={canvasSize.width}
             height={canvasSize.height}
             className="triangle-canvas"
-            style={{ width: '100%', height: '100%', maxWidth: '100%', display: 'block' }}
+            onMouseDown={interactive ? handleMouseDown : undefined}
+            onMouseMove={interactive ? handleMouseMove : undefined}
+            onMouseUp={interactive ? handleMouseUp : undefined}
+            onMouseLeave={interactive ? handleMouseUp : undefined}
+            onTouchStart={interactive ? handleMouseDown : undefined}
+            onTouchMove={interactive ? handleTouchMove : undefined}
+            onTouchEnd={interactive ? handleMouseUp : undefined}
+            style={{ width: '100%', height: '100%', maxWidth: '100%', display: 'block', cursor, touchAction: interactive ? 'none' : 'auto' }}
         />
     );
 }
@@ -2588,6 +2735,16 @@ export function UchburchakPage() {
                         showCircumcircle={showCircumcircle}
                         showHypotenuse={showHypotenuse}
                         isValid={isValidTriangle}
+                        sideLimits={sliderLimits}
+                        onSizeChange={({ sideA: na, sideB: nb, sideC: nc }) => {
+                            const { min, max } = sliderLimits;
+                            const clamp = (v) => Math.max(min, Math.min(max, v));
+                            // Cho'qqini tortganda uchburchak ixtiyoriy bo'ladi
+                            if (triangleType !== 'custom') setTriangleType('custom');
+                            setSideA(clamp(na));
+                            setSideB(clamp(nb));
+                            setSideC(clamp(nc));
+                        }}
                     />
 
                     {isValidTriangle && (

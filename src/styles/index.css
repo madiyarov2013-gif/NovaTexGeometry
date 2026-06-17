@@ -446,7 +446,7 @@ a {
 
 .category-card.card-2d:hover {
   animation: gradient-2d 3s infinite;
-  transform: scale(1.05);
+  transform: translateY(-10px) scale(1.05);
   border-color: var(--accent-primary);
   box-shadow:
     0 0 30px rgba(99, 102, 241, 0.5),
@@ -512,7 +512,7 @@ a {
 
 .category-card.card-3d:hover {
   animation: gradient-3d 3s infinite;
-  transform: scale(1.05);
+  transform: translateY(-10px) scale(1.05);
   border-color: var(--accent-primary);
   box-shadow:
     0 0 30px rgba(99, 102, 241, 0.5),
@@ -619,6 +619,21 @@ a {
 
 .category-card.card-builder:hover .card-arrow {
   color: #a78bfa;
+}
+
+/* ====== HOVER FIX ======
+   Dashboard kartalarida .reveal/.in-view klasslari bor; ularning
+   .reveal.reveal-up.in-view { transform: translateY(0) } qoidasi
+   (specificity 30, fayl oxirida) karta hover transformini bosib o'tib,
+   hover effektini o'ldirardi. .in-view qo'shib specificity'ni 40 ga
+   ko'taramiz — endi hover GitHub'dagidek ishlaydi. */
+.category-card.card-2d.in-view:hover,
+.category-card.card-3d.in-view:hover {
+  transform: translateY(-10px) scale(1.05);
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.4s ease,
+    border-color 0.4s ease;
 }
 
 .coming-soon {
@@ -10319,6 +10334,19 @@ a {
   justify-content: center;
   z-index: 1000;
   padding: var(--spacing-xl);
+  animation: modalOverlayFadeIn 0.35s ease forwards;
+}
+
+@keyframes modalOverlayFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+
+  to {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
 }
 
 /* Modal Content */
@@ -10331,18 +10359,23 @@ a {
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
-  animation: modalSlideIn 0.3s ease;
+  transform-origin: center;
+  animation: modalSlideIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 @keyframes modalSlideIn {
-  from {
+  0% {
     opacity: 0;
-    transform: translateY(-20px);
+    transform: translateY(30px) scale(0.92);
   }
 
-  to {
+  60% {
     opacity: 1;
-    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -12117,3 +12150,89 @@ input[type="number"] {
   color: #9ca3af;
 }
 
+/* ============================================== */
+/*  Dashboard scroll-reveal animations            */
+/*  (KvadratPage "Ko'rinish" bo'limi uslubida)    */
+/* ============================================== */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.reveal.reveal-up.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-delay-1 { transition-delay: 0.08s; }
+.reveal-delay-2 { transition-delay: 0.18s; }
+.reveal-delay-3 { transition-delay: 0.28s; }
+.reveal-delay-4 { transition-delay: 0.38s; }
+
+/* Gradient sweep line on feature-items — inspired by .pro-toggle-item::before */
+.feature-item::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #10b981, #6366f1, transparent);
+  transform: scaleX(0);
+  transform-origin: center;
+  opacity: 0;
+  transition:
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.5s ease;
+  pointer-events: none;
+}
+
+.feature-item.in-view::after {
+  transform: scaleX(1);
+  opacity: 1;
+}
+
+.feature-item:hover::after {
+  background: linear-gradient(90deg, transparent, #34d399, #818cf8, transparent);
+  filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6));
+}
+
+/* Continuous gentle float for icons after entering view */
+@keyframes feature-icon-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.feature-item.in-view .feature-icon {
+  animation: feature-icon-float 3.2s ease-in-out infinite;
+}
+
+.feature-item.in-view:nth-child(2) .feature-icon { animation-delay: 0.4s; }
+.feature-item.in-view:nth-child(3) .feature-icon { animation-delay: 0.8s; }
+.feature-item.in-view:nth-child(4) .feature-icon { animation-delay: 1.2s; }
+
+/* Hovering still wins over float (preserves existing scale effect) */
+.feature-item:hover .feature-icon {
+  animation: none;
+}
+
+/* Accessibility: respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .feature-item::after {
+    transform: scaleX(1);
+    opacity: 1;
+    transition: none;
+  }
+  .feature-item.in-view .feature-icon {
+    animation: none;
+  }
+}
